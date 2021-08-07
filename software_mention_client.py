@@ -57,7 +57,7 @@ class software_mention_client(object):
                 line = line.replace(" ", "").strip()
                 if not line.startswith("#"):
                     self.blacklisted.append(line)
-        logging.info("blacklist size:", len(self.blacklisted))
+        logging.info("blacklist size: " + str(len(self.blacklisted)))
 
         self.scorched_earth = False
 
@@ -99,7 +99,7 @@ class software_mention_client(object):
                 logging.info("Softcite software mention server is up and running")
                 return True
         except: 
-            logging.error('Softcite software mention server does not appear up and running:',
+            logging.error('Softcite software mention server does not appear up and running: ' + 
                 'test call to Softcite software mention failed, please check and re-start a server.')
         return False
 
