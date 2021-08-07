@@ -64,6 +64,7 @@ optional arguments:
                         order to save storage space, careful with this!
 ```
 
+The logs are written by default in a file `./client.log`, but the location of the logs can be changed in the configuration file (default `./config.json`).
 
 ### Processing local PDF files
 

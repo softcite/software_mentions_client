@@ -28,6 +28,7 @@ map_size = 100 * 1024 * 1024 * 1024
 endpoint_pdf = '/service/annotateSoftwarePDF'
 endpoint_txt = '/service/annotateSoftwareText'
 
+# default logging settings
 logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
 
 class software_mention_client(object):
@@ -59,6 +60,24 @@ class software_mention_client(object):
         logging.info("blacklist size:", len(self.blacklisted))
 
         self.scorched_earth = False
+
+        logs_filename = "client.log"
+        if "log_file" in self.config: 
+            logs_filename = self.config['log_file']
+
+        logs_level = logging.DEBUG
+        if "log_level" in self.config:
+            if self.config["log_level"] == 'INFO':
+                logs_level = logging.INFO
+            elif self.config["log_level"] == 'ERROR':
+                logs_level = logging.ERROR
+            elif self.config["log_level"] == 'WARNING':
+                logs_level = logging.WARNING
+            elif self.config["log_level"] == 'CRITICAL':
+                logs_level = logging.CRITICAL
+            else:
+                logs_level = logging.NOTSET
+        logging.basicConfig(filename=logs_filename, filemode='w', level=logs_level)
 
     def _load_config(self, path='./config.json'):
         """
