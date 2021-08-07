@@ -32,7 +32,7 @@ logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
 
 class software_mention_client(object):
     """
-    Python client for using the GROBID software mention service. 
+    Python client for using the Softcite software mention service. 
     """
 
     def __init__(self, config_path='./config.json'):
@@ -68,7 +68,7 @@ class software_mention_client(object):
         self.config = json.loads(config_json)
 
     def service_isalive(self):
-        # test if GROBID software mention recognizer is up and running...
+        # test if Softcite software mention recognizer is up and running...
         the_url = _grobid_software_url(self.config['software_mention_host'], self.config['software_mention_port'])
         the_url += "isalive"
         try:
@@ -81,7 +81,7 @@ class software_mention_client(object):
                 return True
         except: 
             logging.error('Softcite software mention server does not appear up and running:',
-                'test call to grobid software mention failed, please check and re-start a server.')
+                'test call to Softcite software mention failed, please check and re-start a server.')
         return False
 
     def _init_lmdb(self):
@@ -527,9 +527,9 @@ def getSHA1(the_file):
     return sha1.hexdigest()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description = "GROBID Software Mention recognition client")
-    parser.add_argument("--repo-in", default=None, help="path to a directory of PDF files to be processed by the GROBID software mention recognizer")  
-    parser.add_argument("--file-in", default=None, help="a single PDF input file to be processed by the GROBID software mention recognizer") 
+    parser = argparse.ArgumentParser(description = "Softcite software mention recognizer client")
+    parser.add_argument("--repo-in", default=None, help="path to a directory of PDF files to be processed by the Softcite software mention recognizer")  
+    parser.add_argument("--file-in", default=None, help="a single PDF input file to be processed by the Softcite software mention recognizer") 
     parser.add_argument("--file-out", default=None, help="path to a single output the software mentions in JSON format, extracted from the PDF file-in") 
     parser.add_argument("--data-path", default=None, help="path to the resource files created/harvested by biblio-glutton-harvester") 
     parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json") 
@@ -558,7 +558,7 @@ if __name__ == "__main__":
     client = software_mention_client(config_path=config_path)
 
     if not client.service_isalive():
-        sys.exit("Grobid software mention service not available, leaving...")
+        sys.exit("Softcite software mention service not available, leaving...")
 
     if reset:
         client.reset()

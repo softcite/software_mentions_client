@@ -1,6 +1,6 @@
-# GROBID software mention recognition client
+# Softcite software mention recognizer client
 
-Python client for using the GROBID software mention recogntion service. It can be applied to 
+Python client for using the Softcite software mention recognition service. It can be applied to 
 
 * individual PDF files
 
@@ -15,7 +15,7 @@ The client has been tested with Python 3.5 and 3.6.
 
 ## Install
 
-> cd grobid/software-mention/python/
+> cd software_mention_client/
 
 It is advised to setup first a virtual environment to avoid falling into one of these gloomy python dependency marshlands:
 
@@ -31,28 +31,37 @@ Install the dependencies, use:
 ## Usage and options
 
 ```
-usage: software_mention_client.py [-h] [--data-path DATA_PATH]
-                                  [--config CONFIG] [--reprocess] [--reset]
-                                  [--file-in FILE_IN] [--file-out FILE_OUT]
-                                  [--repo-in REPO_IN]
+usage: software_mention_client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN]
+                                  [--file-out FILE_OUT]
+                                  [--data-path DATA_PATH] [--config CONFIG]
+                                  [--reprocess] [--reset] [--load]
+                                  [--diagnostic] [--scorched-earth]
 
-GROBID Software Mention recognition client
+Softcite software mention recognizer client
 
 optional arguments:
   -h, --help            show this help message and exit
+  --repo-in REPO_IN     path to a directory of PDF files to be processed by
+                        the Softcite software mention recognizer
+  --file-in FILE_IN     a single PDF input file to be processed by the
+                        Softcite software mention recognizer
+  --file-out FILE_OUT   path to a single output the software mentions in JSON
+                        format, extracted from the PDF file-in
   --data-path DATA_PATH
-                        path to the JSON dump file created by biblio-glutton-
-                        harvester
+                        path to the resource files created/harvested by
+                        biblio-glutton-harvester
   --config CONFIG       path to the config file, default is ./config.json
-  --reprocess           Reprocessed failed PDF
-  --reset               Ignore previous processing states, and re-init the
+  --reprocess           reprocessed failed PDF
+  --reset               ignore previous processing states and re-init the
                         annotation process from the beginning
-  --file-in FILE_IN     A PDF input file to be processed by the GROBID
-                        software mention recognizer
-  --file-out FILE_OUT   Path to output the software mentions in JSON format,
-                        extracted from the PDF file-in
-  --repo-in REPO_IN     Path to directory of PDf files to be processed by the
-                        GROBID software mention recognizer
+  --load                load json files into the MongoDB instance, the --repo-
+                        in parameter must indicate the path to the directory
+                        of resulting json files to be loaded
+  --diagnostic          perform a full count of annotations and diagnostic
+                        using MongoDB regarding the harvesting and
+                        transformation process
+  --scorched-earth      remove a PDF file after its successful processing in
+                        order to save storage space, careful with this!
 ```
 
 
