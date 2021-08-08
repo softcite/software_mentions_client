@@ -78,6 +78,7 @@ class software_mention_client(object):
             else:
                 logs_level = logging.NOTSET
         logging.basicConfig(filename=logs_filename, filemode='w', level=logs_level)
+        print("logs are written in " + logs_filename)
 
     def _load_config(self, path='./config.json'):
         """
@@ -121,6 +122,11 @@ class software_mention_client(object):
         full_records = []
         nb_total = 0
         start_time = time.time()
+
+        print("\n")
+        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 PDF/s")
+        sys.stdout.flush()
+
         for root, directories, filenames in os.walk(directory):
             for filename in filenames: 
                 if filename.endswith(".pdf") or filename.endswith(".PDF"):
@@ -161,13 +167,15 @@ class software_mention_client(object):
                         out_files = []
                         full_records = []
                         runtime = round(time.time() - start_time, 3)
-                        print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
+                        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+                        sys.stdout.flush()
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
+            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+            sys.stdout.flush()
 
     def annotate_collection(self, data_path, force=False):
         # init lmdb transactions
@@ -177,7 +185,7 @@ class software_mention_client(object):
 
         with self.env.begin(write=True) as txn:
             nb_total = txn.stat()['entries']
-        print("number of entries to process:", nb_total, "entries")
+        print("\nnumber of entries to process:", nb_total, "entries\n")
 
         # iterate over the entries in lmdb
         pdf_files = []
@@ -185,6 +193,10 @@ class software_mention_client(object):
         full_records = []
         nb_total = 0
         start_time = time.time()
+
+        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 PDF/s")
+        sys.stdout.flush()
+
         with self.env.begin(write=True) as txn:
             cursor = txn.cursor()
             for key, value in cursor:
@@ -220,14 +232,15 @@ class software_mention_client(object):
                     out_files = []
                     full_records = []
                     runtime = round(time.time() - start_time, 3)
-                    print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
+                    sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+                    sys.stdout.flush()
 
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
             runtime = round(time.time() - start_time, 3)
-            print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
-        #self.env.close()
+            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+            sys.stdout.flush()
 
     def annotate_batch(self, pdf_files, out_files=None, full_records=None):
         # process a provided list of PDF
@@ -386,13 +399,18 @@ class software_mention_client(object):
 
         # for keeping track of the processing
         # update processed entry in the lmdb (having entities or not) and failure
+        logging.debug("updating lmdb...")
         if self.env_software is not None and full_record is not None:
+            logging.debug("entry is " + full_record['id'])
             with self.env_software.begin(write=True) as txn:
                 if jsonObject is not None:
                     txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
                 else:
                     # the process failed
                     txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
+        else:
+            logging.debug("could not update lmdb")
+        logging.debug("updating lmdb done !")
 
         if self.scorched_earth and jsonObject is not None:
             # processed is done, remove local PDF file
@@ -419,7 +437,7 @@ class software_mention_client(object):
                 else:
                     nb_fail += 1
 
-        print("---")
+        print("\n\n---")
         print("total entries:", nb_total)
         print("---")
         print("total successfully processed:", nb_success)
