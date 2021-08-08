@@ -232,7 +232,7 @@ class software_mention_client(object):
             #with ProcessPoolExecutor(max_workers=self.config["concurrency"]) as executor:
             # note: ProcessPoolExecutor will not work due to env objects that can't be serailized (e.g. LMDB variables)
             # client is not cpu bounded but io bounded, so normally it's still okay with threads and GIL
-            executor.map(self.annotate, pdf_files, out_files, full_records, timeout=300)
+            executor.map(self.annotate, pdf_files, out_files, full_records, timeout=600)
 
     def reprocess_failed(self):
         """
@@ -312,7 +312,7 @@ class software_mention_client(object):
         
         #print("calling... ", url)
 
-        response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=50)
+        response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=600)
         jsonObject = None
         if response.status_code == 503:
             logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
