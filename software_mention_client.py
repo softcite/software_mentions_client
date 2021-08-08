@@ -85,6 +85,9 @@ class software_mention_client(object):
         """
         config_json = open(path).read()
         self.config = json.loads(config_json)
+        if not "timeout" in self.config:
+            # this is the default value for a service timeout
+            self.config["timeout"] = 600
 
     def service_isalive(self):
         # test if Softcite software mention recognizer is up and running...
@@ -111,7 +114,7 @@ class software_mention_client(object):
         #envFilePath = os.path.join(self.config["data_path"], 'fail_software')
         #self.env_fail_software = lmdb.open(envFilePath, map_size=map_size)
 
-    def annotate_directory(self, directory):
+    def annotate_directory(self, directory, force=False):
         # recursive directory walk for all pdf documents
         pdf_files = []
         out_files = []
@@ -128,8 +131,8 @@ class software_mention_client(object):
 
                     sha1 = getSHA1(os.path.join(root,filename))
 
-                    # if the json file already exists, we skip 
-                    if os.path.isfile(os.path.join(root, filename_json)):
+                    # if the json file already exists and not force, we skip 
+                    if os.path.isfile(os.path.join(root, filename_json)) and not force:
                         # check that this id is considered in the lmdb keeping track of the process
                         with self.env_software.begin() as txn:
                             status = txn.get(sha1.encode(encoding='UTF-8'))
@@ -142,7 +145,7 @@ class software_mention_client(object):
                     # the hash of the PDF file is used as unique identifier for the PDF (SHA1)
                     with self.env_software.begin() as txn:
                         status = txn.get(sha1.encode(encoding='UTF-8'))
-                        if status is not None:# and status.decode(encoding='UTF-8') == "True":
+                        if status is not None and not force:
                             continue
 
                     pdf_files.append(os.path.join(root,filename))
@@ -166,7 +169,7 @@ class software_mention_client(object):
             runtime = round(time.time() - start_time, 3)
             print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
 
-    def annotate_collection(self, data_path):
+    def annotate_collection(self, data_path, force=False):
         # init lmdb transactions
         # open in read mode
         envFilePath = os.path.join(data_path, 'entries')
@@ -189,9 +192,9 @@ class software_mention_client(object):
                 local_entry["id"] = key.decode(encoding='UTF-8');
                 #print(local_entry)
 
-                # if the json file already exists, we skip 
+                # if the json file already exists and not force, we skip 
                 json_outfile = os.path.join(os.path.join(data_path, generateStoragePath(local_entry['id']), local_entry['id'], local_entry['id']+".software.json"))
-                if os.path.isfile(json_outfile):
+                if os.path.isfile(json_outfile) and not force:
                     # check that this id is considered in the lmdb keeping track of the process
                     with self.env_software.begin() as txn:
                         status = txn.get(local_entry['id'].encode(encoding='UTF-8'))
@@ -200,10 +203,10 @@ class software_mention_client(object):
                             txn2.put(local_entry['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
                     continue
 
-                # if identifier already processed in the local lmdb (successfully or not), we skip this file
+                # if identifier already processed in the local lmdb (successfully or not) and not force, we skip this file
                 with self.env_software.begin() as txn:
                     status = txn.get(local_entry['id'].encode(encoding='UTF-8'))
-                    if status is not None:# and status.decode(encoding='UTF-8') == "True":
+                    if status is not None and not force:
                         continue
 
                 pdf_files.append(os.path.join(data_path, generateStoragePath(local_entry['id']), local_entry['id'], local_entry['id']+".pdf"))
@@ -224,7 +227,7 @@ class software_mention_client(object):
             self.annotate_batch(pdf_files, out_files, full_records)
             runtime = round(time.time() - start_time, 3)
             print("total process:", nb_total, "- accumulated runtime: %s s " % (runtime), "- %s PDF/s" % round(nb_total/runtime, 2))
-        self.env.close()
+        #self.env.close()
 
     def annotate_batch(self, pdf_files, out_files=None, full_records=None):
         # process a provided list of PDF
@@ -232,7 +235,7 @@ class software_mention_client(object):
             #with ProcessPoolExecutor(max_workers=self.config["concurrency"]) as executor:
             # note: ProcessPoolExecutor will not work due to env objects that can't be serailized (e.g. LMDB variables)
             # client is not cpu bounded but io bounded, so normally it's still okay with threads and GIL
-            executor.map(self.annotate, pdf_files, out_files, full_records, timeout=600)
+            executor.map(self.annotate, pdf_files, out_files, full_records, timeout=self.config["timeout"])
 
     def reprocess_failed(self):
         """
@@ -291,17 +294,18 @@ class software_mention_client(object):
         self._init_lmdb()
 
     def load_mongo(self, directory):
-        if self.config["mongo_host"] is not None:
+        if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
             mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
             self.mongo_db = mongo_client[self.config["mongo_db"]]
-        for root, directories, filenames in os.walk(directory):
-            for filename in filenames: 
-                if filename.endswith(".software.json"):
-                    #print(os.path.join(root,filename))
-                    # we store the result in mongo db 
-                    the_json = open(os.path.join(root,filename)).read()
-                    jsonObject = json.loads(the_json)
-                    self._insert_mongo(jsonObject)
+        if self.mongo_db != None:
+            for root, directories, filenames in os.walk(directory):
+                for filename in filenames: 
+                    if filename.endswith(".software.json"):
+                        #print(os.path.join(root,filename))
+                        # we store the result in mongo db 
+                        the_json = open(os.path.join(root,filename)).read()
+                        jsonObject = json.loads(the_json)
+                        self._insert_mongo(jsonObject)
 
     def annotate(self, file_in, file_out, full_record):
         the_file = {'input': open(file_in, 'rb')}
@@ -311,26 +315,34 @@ class software_mention_client(object):
         url += endpoint_pdf
         
         #print("calling... ", url)
-
-        response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=600)
         jsonObject = None
-        if response.status_code == 503:
-            logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
-            time.sleep(self.config['sleep_time'])
-            return self.annotate(file_in, self.config, file_out, full_record)
-        elif response.status_code >= 500:
-            logging.error('[{0}] Server Error '.format(response.status_code) + file_in)
-        elif response.status_code == 404:
-            logging.error('[{0}] URL not found: [{1}] '.format(response.status_code + url))
-        elif response.status_code >= 400:
-            logging.error('[{0}] Bad Request'.format(response.status_code))
-            logging.error(response.content)
-        elif response.status_code == 200:
-            jsonObject = response.json()
-            # note: in case the recognizer has found no software in the document, it will still return
-            # a json object as result, without mentions, but with MD5 and page information
-        else:
-            logging.error('Unexpected Error: [HTTP {0}]: Content: {1}'.format(response.status_code, response.content))
+        try:
+            response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=self.config["timeout"])
+            
+            if response.status_code == 503:
+                logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
+                time.sleep(self.config['sleep_time'])
+                return self.annotate(file_in, self.config, file_out, full_record)
+            elif response.status_code >= 500:
+                logging.error('[{0}] Server Error '.format(response.status_code) + file_in)
+            elif response.status_code == 404:
+                logging.error('[{0}] URL not found: [{1}] '.format(response.status_code + url))
+            elif response.status_code >= 400:
+                logging.error('[{0}] Bad Request'.format(response.status_code))
+                logging.error(response.content)
+            elif response.status_code == 200:
+                jsonObject = response.json()
+                # note: in case the recognizer has found no software in the document, it will still return
+                # a json object as result, without mentions, but with MD5 and page information
+            else:
+                logging.error('Unexpected Error: [HTTP {0}]: Content: {1}'.format(response.status_code, response.content))
+
+        except requests.exceptions.Timeout:
+            logging.exception("The request to the annotation service has timeout")
+        except requests.exceptions.TooManyRedirects:
+            logging.exception("The request failed due to too many redirects")
+        except requests.exceptions.RequestException:
+            logging.exception("The request failed")
 
         # at this stage, if jsonObject is still at None, the process failed 
 
@@ -418,11 +430,14 @@ class software_mention_client(object):
         if full_diagnostic:
             # check mongodb access - if mongodb is not used or available, we don't go further
             if self.mongo_db is None:
-                mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
-                self.mongo_db = mongo_client[self.config["mongo_db"]]
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                    mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
+                    self.mongo_db = mongo_client[self.config["mongo_db"]]
+
             if self.mongo_db is None:
                 print("MongoDB server is not available")    
                 return
+
             print("MongoDB - number of documents: ", self.mongo_db.documents.count_documents({}))
             print("MongoDB - number of software mentions: ", self.mongo_db.annotations.count_documents({}))
 
@@ -465,6 +480,9 @@ class software_mention_client(object):
         if self.mongo_db is None:
             mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
             self.mongo_db = mongo_client[self.config["mongo_db"]]
+
+        if self.mongo_db is None:
+            return
 
         # check if the article/annotations are not already present
         if self.mongo_db.documents.count_documents({ 'id': jsonObject['id'] }, limit = 1) != 0:
@@ -579,8 +597,10 @@ if __name__ == "__main__":
     if not client.service_isalive():
         sys.exit("Softcite software mention service not available, leaving...")
 
+    force = False
     if reset:
         client.reset()
+        force = True
 
     if scorched_earth:
         client.scorched_earth = True
@@ -600,11 +620,11 @@ if __name__ == "__main__":
     elif reprocess:
         client.reprocess_failed()
     elif repo_in is not None: 
-        client.annotate_directory(repo_in)
+        client.annotate_directory(repo_in, force)
     elif file_in is not None:
-        client.annotate(file_in, client.config, file_out)
+        client.annotate(file_in, file_out, None)
     elif data_path is not None: 
-        client.annotate_collection(data_path)
+        client.annotate_collection(data_path, force)
 
     if not full_diagnostic:
         client.diagnostic(full_diagnostic=False)

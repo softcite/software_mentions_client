@@ -4,14 +4,16 @@ Python client for using the Softcite software mention recognition service. It ca
 
 * individual PDF files
 
-* recursively to a directory, processing all the encountered PDF 
+* recursively to a local directory, processing all the encountered PDF 
 
-* to a collection of documents harvested by https://github.com/kermitt2/biblio-glutton-harvester, with the benefit of re-using the collection manifest for injectng metadata and keeping track of progress. The collection can be stored locally or on a S3 storage. 
+* to a collection of documents harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and [article-dataset-builder](https://github.com/kermitt2/article-dataset-builder), with the benefit of re-using the collection manifest for injectng metadata and keeping track of progress. The collection can be stored locally or on a S3 storage. 
 
 
 ## Requirements
 
-The client has been tested with Python 3.5 and 3.6. 
+The client has been tested with Python 3.5-3.7. 
+
+The client requires a working [Softcite software mention recognition service](https://github.com/ourresearch/software-mentions). Service host and port can be changed in the `config.json` file of the client. 
 
 ## Install
 
@@ -85,9 +87,9 @@ The default config file is `./config.json`, but could also be specified via the 
 > python3 software_mention_client.py --repo-in /mnt/data/biblio/pmc_oa_dir/ --config ./my_config.json
 
 
-### Processing a collection of PDF harvested by biblio-glutton-harvester stored locally
+### Processing a collection of PDF harvested by biblio-glutton-harvester
 
-[biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) creates a collection manifest as a LMDB database to keep track of the harvesting of large collection of files. Storage of the resource can be located on a local file system or on a AWS S3 storage. The `software-mention` client can use the local data repository produced by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and in particular its collection manifest to process these harvested documents. 
+[biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and [article-dataset-builder](https://github.com/kermitt2/article-dataset-builder) creates a collection manifest as a LMDB database to keep track of the harvesting of large collection of files. Storage of the resource can be located on a local file system or on a AWS S3 storage. The `software-mention` client will use the collection manifest to process these harvested documents. 
 
 * locally:
 
@@ -96,6 +98,15 @@ The default config file is `./config.json`, but could also be specified via the 
 `--data-path` indicates the path to the repository of data harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester).
 
 The resulting JSON files will be enriched by the metadata records of the processed PDF and will be stored together with each processed PDF in the data repository. 
+
+If the harvested collection is located on a S3 storage, the access information must be indicated in the configuration file of the client `config.json`. The extracted software mention will be written in a file with extension `.software.json`, for example:
+
+```
+-rw-rw-r-- 1 lopez lopez 1.1M Aug  8 03:26 0100a44b-6f3f-4cf7-86f9-8ef5e8401567.pdf
+-rw-rw-r-- 1 lopez lopez  485 Aug  8 03:41 0100a44b-6f3f-4cf7-86f9-8ef5e8401567.software.json
+```
+
+If a MongoDB server access information is indicated in the configuration file `config.json`, the extracted information will additionally be written in MongoDB. 
 
 ## License and contact
 
