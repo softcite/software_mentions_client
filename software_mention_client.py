@@ -321,9 +321,14 @@ class software_mention_client(object):
                         self._insert_mongo(jsonObject)
 
     def annotate(self, file_in, file_out, full_record):
-        the_file = {'input': open(file_in, 'rb')}
+        try:
+            the_file = {'input': open(file_in, 'rb')}
+        except:
+            logging.exception("input file appears invalid: " + file_in)
+            return
+
         url = "http://" + self.config["software_mention_host"]
-        if self.config["software_mention_port"] is not None:
+        if "software_mention_port" in self.config and len(self.config["software_mention_port"].strip())>0:
             url += ":" + str(self.config["software_mention_port"])
         url += endpoint_pdf
         
@@ -358,59 +363,54 @@ class software_mention_client(object):
             logging.exception("The request failed")
 
         # at this stage, if jsonObject is still at None, the process failed 
-
-        if jsonObject is not None and 'mentions' in jsonObject and len(jsonObject['mentions']) != 0:
+        if jsonObject is not None and 'mentions' in jsonObject and len(jsonObject['mentions']) > 0:
             # we have found software mentions in the document
             # add file, DOI, date and version info in the JSON, if available
             if full_record is not None:
                 jsonObject['id'] = full_record['id']
-                if len(full_record) > 1:
-                    jsonObject['metadata'] = full_record;
+                #if len(full_record) > 1:
+                jsonObject['metadata'] = full_record;
             jsonObject['original_file_path'] = file_in
             jsonObject['file_name'] = os.path.basename(file_in)
 
             # apply blacklist
             new_mentions = []
-            for mention in jsonObject['mentions']:
-                if "software-name" in mention:
-                    software_name = mention["software-name"]
-                    normalizedForm = software_name["normalizedForm"]
-                    normalizedForm = normalizedForm.replace(" ", "").strip()
-                    if normalizedForm not in self.blacklisted:
-                        new_mentions.append(mention)
-            jsonObject['mentions'] = new_mentions
+            if 'mentions' in jsonObject:
+                for mention in jsonObject['mentions']:
+                    if "software-name" in mention:
+                        software_name = mention["software-name"]
+                        normalizedForm = software_name["normalizedForm"]
+                        normalizedForm = normalizedForm.replace(" ", "").strip()
+                        if normalizedForm not in self.blacklisted:
+                            new_mentions.append(mention)
+                jsonObject['mentions'] = new_mentions
 
             if file_out is not None: 
                 # we write the json result into a file together with the processed pdf
                 with open(file_out, "w", encoding="utf-8") as json_file:
                     json_file.write(json.dumps(jsonObject))
 
-            if self.config["mongo_host"] is not None:
+            if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
                 # we store the result in mongo db 
                 self._insert_mongo(jsonObject)
         elif jsonObject is not None:
             # we have no software mention in the document, we still write an empty result file
             # along with the PDF/medtadata files to easily keep track of the processing for this doc
             if file_out is not None: 
-                # force empty explicit mentions
+                # force empty explicit no mentions
                 jsonObject['mentions'] = []
                 with open(file_out, "w", encoding="utf-8") as json_file:
                     json_file.write(json.dumps(jsonObject))
 
         # for keeping track of the processing
         # update processed entry in the lmdb (having entities or not) and failure
-        logging.debug("updating lmdb...")
         if self.env_software is not None and full_record is not None:
-            logging.debug("entry is " + full_record['id'])
             with self.env_software.begin(write=True) as txn:
                 if jsonObject is not None:
                     txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
                 else:
                     # the process failed
                     txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
-        else:
-            logging.debug("could not update lmdb")
-        logging.debug("updating lmdb done !")
 
         if self.scorched_earth and jsonObject is not None:
             # processed is done, remove local PDF file
