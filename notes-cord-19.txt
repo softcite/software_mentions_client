@@ -1,21 +1,124 @@
-total process: 107300 - accumulated runtime: 38229.347 s  - 2.81 PDF/s
+reharvested CORD-19 version 2021-07-26
+
 ---
-total entries: 145309
+total entries: 296686
 ---
-total successfully processed: 144862
+total successfully processed: 295850
 ---
-total failed: 447
+total failed: 836
 ---
-MongoDB - number of documents:  60017
-MongoDB - number of software mentions:  493668
-      * with software name: 493668
-      * with version: 82226
-      * with publisher: 40727
-      * with url: 15139
-      * with at least one reference 133186
-      * total references 133186
-MongoDB - number of bibliographical references:  17986
-      * with DOI: 9578
-      * with PMID: 7329
-      * with PMC ID: 3599
+MongoDB - number of documents:  115073
+MongoDB - number of software mentions:  652518
+      * with software name: 652518
+      * with version: 188724
+      * with publisher: 107421
+      * with url: 59366
+      * with at least one reference 230145
+      * total references 230145
+MongoDB - number of bibliographical references:  92573
+      * with DOI: 49350
+      * with PMID: 32895
+      * with PMC ID: 18741
 ---
+
+> db.annotations.aggregate( [ {$unwind: "$software-name.normalizedForm"}, {$sortByCount: "$software-name.normalizedForm" } ] )
+{ "_id" : "SPSS", "count" : 22806 }
+{ "_id" : "Excel", "count" : 9422 }
+{ "_id" : "GraphPad Prism", "count" : 9306 }
+{ "_id" : "Google", "count" : 8745 }
+{ "_id" : "SAS", "count" : 7202 }
+{ "_id" : "Stata", "count" : 5817 }
+{ "_id" : "BLAST", "count" : 4521 }
+{ "_id" : "Python", "count" : 4433 }
+{ "_id" : "ImageJ", "count" : 4269 }
+{ "_id" : "MATLAB", "count" : 3683 }
+{ "_id" : "YouTube", "count" : 3655 }
+{ "_id" : "STATA", "count" : 3580 }
+{ "_id" : "Zoom", "count" : 3408 }
+{ "_id" : "SPSS Statistics", "count" : 2897 }
+{ "_id" : "Prism", "count" : 2863 }
+{ "_id" : "MEGA", "count" : 2837 }
+{ "_id" : "FlowJo", "count" : 2704 }
+{ "_id" : "WeChat", "count" : 2558 }
+{ "_id" : "Android", "count" : 2531 }
+{ "_id" : "REDCap", "count" : 2472 }
+{ "_id" : "GSEA", "count" : 1998 }
+{ "_id" : "Matlab", "count" : 1913 }
+{ "_id" : "Twitter", "count" : 1878 }
+{ "_id" : "XGBoost", "count" : 1871 }
+{ "_id" : "Cytoscape", "count" : 1862 }
+{ "_id" : "MAFFT", "count" : 1676 }
+{ "_id" : "Skype", "count" : 1671 }
+{ "_id" : "NVivo", "count" : 1662 }
+{ "_id" : "GISAID", "count" : 1600 }
+{ "_id" : "GitHub", "count" : 1474 }
+{ "_id" : "PyMOL", "count" : 1426 }
+{ "_id" : "Google Scholar", "count" : 1398 }
+{ "_id" : "Covidence", "count" : 1375 }
+{ "_id" : "Ensembl", "count" : 1340 }
+{ "_id" : "GROMACS", "count" : 1308 }
+{ "_id" : "AMBER", "count" : 1294 }
+{ "_id" : "AutoDock Vina", "count" : 1289 }
+{ "_id" : "IEDB", "count" : 1260 }
+{ "_id" : "ClustalW", "count" : 1179 }
+{ "_id" : "Linux", "count" : 1138 }
+{ "_id" : "Windows", "count" : 1115 }
+{ "_id" : "AutoDock", "count" : 1047 }
+{ "_id" : "iOS", "count" : 1033 }
+{ "_id" : "Rosetta", "count" : 1020 }
+{ "_id" : "Review Manager", "count" : 991 }
+{ "_id" : "RevMan", "count" : 963 }
+{ "_id" : "Geneious", "count" : 958 }
+{ "_id" : "ArcGIS", "count" : 956 }
+{ "_id" : "RStudio", "count" : 942 }
+{ "_id" : "ggplot", "count" : 939 }
+{ "_id" : "Image J", "count" : 906 }
+{ "_id" : "Chimera", "count" : 889 }
+{ "_id" : "MUSCLE", "count" : 860 }
+{ "_id" : "MedCalc", "count" : 801 }
+{ "_id" : "HADDOCK", "count" : 799 }
+{ "_id" : "DESeq", "count" : 796 }
+{ "_id" : "EndNote", "count" : 786 }
+{ "_id" : "UCSF Chimera", "count" : 767 }
+{ "_id" : "Moodle", "count" : 766 }
+{ "_id" : "WhatsApp", "count" : 758 }
+{ "_id" : "STAR", "count" : 757 }
+{ "_id" : "CHARMM", "count" : 740 }
+{ "_id" : "Bowtie", "count" : 732 }
+{ "_id" : "I-TASSER", "count" : 727 }
+{ "_id" : "DAVID", "count" : 713 }
+{ "_id" : "BERT", "count" : 713 }
+{ "_id" : "C", "count" : 712 }
+{ "_id" : "Clustal Omega", "count" : 693 }
+{ "_id" : "Nextstrain", "count" : 690 }
+{ "_id" : "Glide", "count" : 685 }
+{ "_id" : "VOSviewer", "count" : 674 }
+{ "_id" : "VaxiJen", "count" : 673 }
+{ "_id" : "BioEdit", "count" : 672 }
+{ "_id" : "JMP", "count" : 664 }
+{ "_id" : "BLASTn", "count" : 662 }
+{ "_id" : "Graphpad Prism", "count" : 657 }
+{ "_id" : "STRING", "count" : 650 }
+{ "_id" : "SafeGraph", "count" : 644 }
+{ "_id" : "SWISS-MODEL", "count" : 630 }
+{ "_id" : "MOE", "count" : 630 }
+{ "_id" : "ChEMBL", "count" : 608 }
+{ "_id" : "Mplus", "count" : 579 }
+{ "_id" : "FastQC", "count" : 561 }
+{ "_id" : "GraphPad", "count" : 558 }
+{ "_id" : "Autodock", "count" : 552 }
+{ "_id" : "G*Power", "count" : 535 }
+{ "_id" : "R package", "count" : 527 }
+{ "_id" : "SQL", "count" : 522 }
+{ "_id" : "Phenix", "count" : 521 }
+{ "_id" : "VMD", "count" : 517 }
+{ "_id" : "PyMol", "count" : 513 }
+{ "_id" : "MaxQuant", "count" : 499 }
+{ "_id" : "PhyML", "count" : 496 }
+{ "_id" : "Maestro", "count" : 492 }
+{ "_id" : "NetMHCpan", "count" : 486 }
+{ "_id" : "Keras", "count" : 481 }
+{ "_id" : "BLASTN", "count" : 474 }
+{ "_id" : "Trimmomatic", "count" : 465 }
+{ "_id" : "Statistica", "count" : 459 }
+{ "_id" : "geNorm", "count" : 458 }

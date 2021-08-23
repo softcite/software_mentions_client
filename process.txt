@@ -12,6 +12,8 @@ db.references.count()
 db.documents.count()
 db.annotations.count()
 
+db.annotations.aggregate( [ {$unwind: "$software-name.normalizedForm"}, {$sortByCount: "$software-name.normalizedForm" } ] )
+
 * install/run the client
 
 source env/bin/activate
