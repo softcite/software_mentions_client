@@ -310,15 +310,55 @@ class software_mention_client(object):
         if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
             mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
             self.mongo_db = mongo_client[self.config["mongo_db"]]
-        if self.mongo_db != None:
-            for root, directories, filenames in os.walk(directory):
-                for filename in filenames: 
-                    if filename.endswith(".software.json"):
-                        #print(os.path.join(root,filename))
-                        # we store the result in mongo db 
-                        the_json = open(os.path.join(root,filename)).read()
-                        jsonObject = json.loads(the_json)
-                        self._insert_mongo(jsonObject)
+        if self.mongo_db == None:
+            return
+
+        failed = 0
+        for root, directories, filenames in os.walk(directory):
+            for filename in filenames: 
+                if filename.endswith(".software.json"):
+                    #print(os.path.join(root,filename))
+                    the_json = open(os.path.join(root,filename)).read()
+                    jsonObject = json.loads(the_json)
+                    local_id = None
+                    if not 'id' in jsonObject:
+                        ind = filename.find(".")
+                        if ind != -1:
+                            local_id = filename[:ind]
+                            jsonObject['id'] = local_id
+                    else:
+                        local_id = jsonObject['id']
+
+                    if local_id == None:
+                        continue
+
+                    # no mention, no insert
+                    if not 'mentions' in jsonObject or len(jsonObject['mentions']) == 0:
+                        continue
+                        
+                    # possibly clean original file path
+                    if "original_file_path" in jsonObject:
+                        if jsonObject["original_file_path"].startswith('../biblio-glutton-harvester/'):
+                            jsonObject["original_file_path"] = jsonObject["original_file_path"].replace('../biblio-glutton-harvester/', '')
+                    
+
+                    # update metadata via biblio-glutton (this is to be done for mongo upload from file only)
+                    if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip())>0:
+                        if 'metadata' in jsonObject and 'doi' in jsonObject['metadata']: 
+                            glutton_metadata = self.biblio_glutton_lookup(doi=jsonObject['metadata']['doi'])
+                            if glutton_metadata != None:
+                                # update/complete document metadata
+                                glutton_metadata['id'] = local_id
+                                if 'best_oa_location' in jsonObject['metadata']:
+                                    glutton_metadata['best_oa_location'] = jsonObject['metadata']['best_oa_location']
+                                jsonObject['metadata'] = glutton_metadata
+                                self._insert_mongo(jsonObject)
+                            else:
+                                failed += 1
+                        else:
+                            failed += 1
+
+        print("number of glutton metadata lookup failed:", failed)
 
     def annotate(self, file_in, file_out, full_record):
         try:
@@ -541,6 +581,43 @@ class software_mention_client(object):
                 inserted_mention_id = self.mongo_db.annotations.insert_one(mention).inserted_id
 
 
+    def biblio_glutton_lookup(self, doi=None, pmcid=None, pmid=None, istex_id=None, istex_ark=None):
+        """
+        Lookup on biblio_glutton with the provided strong identifiers, return the full agregated biblio_glutton record
+        """
+        if not "biblio_glutton_url" in self.config or len(self.config["biblio_glutton_url"].strip()) == 0:
+            return None
+
+        biblio_glutton_url = self.config["biblio_glutton_url"]+"/service/lookup?"
+        success = False
+        jsonResult = None
+
+        if doi is not None and len(doi)>0:
+            response = requests.get(biblio_glutton_url, params={'doi': doi}, verify=False, timeout=5)
+            success = (response.status_code == 200)
+            if success:
+                jsonResult = response.json()
+
+        if not success and pmid is not None and len(pmid)>0:
+            response = requests.get(biblio_glutton_url + "pmid=" + pmid, verify=False, timeout=5)
+            success = (response.status_code == 200)
+            if success:
+                jsonResult = response.json()     
+
+        if not success and pmcid is not None and len(pmcid)>0:
+            response = requests.get(biblio_glutton_url + "pmc=" + pmcid, verify=False, timeout=5)  
+            success = (response.status_code == 200)
+            if success:
+                jsonResult = response.json()
+
+        if not success and istex_id is not None and len(istex_id)>0:
+            response = requests.get(biblio_glutton_url + "istexid=" + istex_id, verify=False, timeout=5)
+            success = (response.status_code == 200)
+            if success:
+                jsonResult = response.json()
+        
+        return jsonResult
+
 def generateStoragePath(identifier):
     '''
     Convert a file name into a path with file prefix as directory paths:
@@ -590,8 +667,8 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json") 
     parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF") 
     parser.add_argument("--reset", action="store_true", help="ignore previous processing states and re-init the annotation process from the beginning") 
-    parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in parameter must indicate the path "
-        +"to the directory of resulting json files to be loaded") 
+    parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
+        +"to the directory of resulting json files to be loaded, --dump must indicate the path to the json dump file of document metadata") 
     parser.add_argument("--diagnostic", action="store_true", help="perform a full count of annotations and diagnostic using MongoDB "  
         +"regarding the harvesting and transformation process") 
     parser.add_argument("--scorched-earth", action="store_true", help="remove a PDF file after its sucessful processing in order to save storage space" 
@@ -612,7 +689,7 @@ if __name__ == "__main__":
 
     client = software_mention_client(config_path=config_path)
 
-    if not client.service_isalive():
+    if not load_mongo and not client.service_isalive():
         sys.exit("Softcite software mention service not available, leaving...")
 
     force = False

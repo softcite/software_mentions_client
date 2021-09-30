@@ -14,5 +14,6 @@
     "concurrency": 8,
     "timeout": 600,
     "log_file": "client.log",
-    "log_level": "DEBUG"
+    "log_level": "DEBUG",
+    "biblio_glutton_url": ""
 }
