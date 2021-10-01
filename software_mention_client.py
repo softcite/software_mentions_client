@@ -319,7 +319,12 @@ class software_mention_client(object):
                 if filename.endswith(".software.json"):
                     #print(os.path.join(root,filename))
                     the_json = open(os.path.join(root,filename)).read()
-                    jsonObject = json.loads(the_json)
+                    try:
+                        jsonObject = json.loads(the_json)
+                    except:
+                        print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                        continue
+
                     local_id = None
                     if not 'id' in jsonObject:
                         ind = filename.find(".")
@@ -335,17 +340,21 @@ class software_mention_client(object):
                     # no mention, no insert
                     if not 'mentions' in jsonObject or len(jsonObject['mentions']) == 0:
                         continue
-                        
+
                     # possibly clean original file path
                     if "original_file_path" in jsonObject:
                         if jsonObject["original_file_path"].startswith('../biblio-glutton-harvester/'):
                             jsonObject["original_file_path"] = jsonObject["original_file_path"].replace('../biblio-glutton-harvester/', '')
                     
-
                     # update metadata via biblio-glutton (this is to be done for mongo upload from file only)
                     if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip())>0:
                         if 'metadata' in jsonObject and 'doi' in jsonObject['metadata']: 
-                            glutton_metadata = self.biblio_glutton_lookup(doi=jsonObject['metadata']['doi'])
+                            try:
+                                glutton_metadata = self.biblio_glutton_lookup(doi=jsonObject['metadata']['doi'])
+                            except: 
+                                print("the call to biblio-glutton failed for", jsonObject['metadata']['doi'])
+                                failed += 1
+                                continue
                             if glutton_metadata != None:
                                 # update/complete document metadata
                                 glutton_metadata['id'] = local_id
