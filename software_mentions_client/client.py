@@ -25,8 +25,8 @@ import logging.handlers
 map_size = 100 * 1024 * 1024 * 1024 
 
 # default endpoint
-endpoint_pdf = '/service/annotateSoftwarePDF'
-endpoint_txt = '/service/annotateSoftwareText'
+endpoint_pdf = 'service/annotateSoftwarePDF'
+endpoint_txt = 'service/annotateSoftwareText'
 
 # default logging settings
 logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
@@ -92,8 +92,11 @@ class software_mentions_client(object):
 
     def service_isalive(self):
         # test if Softcite software mention recognizer is up and running...
-        the_url = _grobid_software_url(self.config['software_mention_host'], self.config['software_mention_port'])
-        the_url += "isalive"
+        print(self.config['software_mention_url'])
+        the_url = self.config['software_mention_url']
+        if not the_url.endswith("/"):
+            the_url += "/"
+        the_url += "service/isalive"
         try:
             r = requests.get(the_url)
 
@@ -376,9 +379,9 @@ class software_mentions_client(object):
             logging.exception("input file appears invalid: " + file_in)
             return
 
-        url = "http://" + self.config["software_mention_host"]
-        if "software_mention_port" in self.config and len(self.config["software_mention_port"].strip())>0:
-            url += ":" + str(self.config["software_mention_port"])
+        url = self.config["software_mention_url"]
+        if not url.endswith("/"):
+            url += "/"
         url += endpoint_pdf
         
         #print("calling... ", url)
@@ -636,13 +639,6 @@ def generateStoragePath(identifier):
 
 def _deserialize_pickle(serialized):
     return pickle.loads(serialized)
-
-def _grobid_software_url(grobid_base, grobid_port):
-    the_url = 'http://'+grobid_base
-    if grobid_port is not None and len(grobid_port)>0:
-        the_url += ":"+grobid_port
-    the_url += "/service/"
-    return the_url
 
 def _clean_json(d):
     # clean recursively a json for insertion in MongoDB, basically remove keys starting with $
