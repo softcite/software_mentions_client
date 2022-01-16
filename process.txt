@@ -17,7 +17,7 @@ db.annotations.aggregate( [ {$unwind: "$software-name.normalizedForm"}, {$sortBy
 * install/run the client
 
 source env/bin/activate
-python3 software_mention_client.py --data-path /media/lopez/store/cord-19/data3/ --config my_config.json 
+python3 software_mentions_client.py --data-path /media/lopez/store/cord-19/data3/ --config my_config.json 
 
 
 * results are stored in mongodb but also written along with the full texts
