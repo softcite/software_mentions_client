@@ -17,23 +17,38 @@ The client requires a working [Softcite software mention recognition service](ht
 
 ## Install
 
-> cd software_mention_client/
+```console
+> git clone https://github.com/softcite/software_mentions_client.git
+> cd software_mentions_client/
+```
 
 It is advised to setup first a virtual environment to avoid falling into one of these gloomy python dependency marshlands:
 
+```console
 > virtualenv --system-site-packages -p python3 env
+```
 
+```console
 > source env/bin/activate
+```
 
 Install the dependencies, use:
 
+```console
 > pip3 install -r requirements.txt
+```
+
+Finally install the project in editable state
+
+```console
+> pip3 install -e .
+```
 
 
 ## Usage and options
 
 ```
-usage: software_mention_client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN]
+usage: software_mentions_client/client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN]
                                   [--file-out FILE_OUT]
                                   [--data-path DATA_PATH] [--config CONFIG]
                                   [--reprocess] [--reset] [--load]
@@ -72,7 +87,7 @@ The logs are written by default in a file `./client.log`, but the location of th
 
 For processing a single file., the resulting json being written as file at the indicated output path:
 
-> python3 software_mention_client.py --file-in toto.pdf --file-out toto.json
+> python3 software_mentions_client/client.py --file-in toto.pdf --file-out toto.json
 
 For processing recursively a directory of PDF files, the results will be:
 
@@ -80,11 +95,11 @@ For processing recursively a directory of PDF files, the results will be:
 
 * *and* in the directory of PDF files, as json files, together with each processed PDF
 
-> python3 software_mention_client.py --repo-in /mnt/data/biblio/pmc_oa_dir/
+> python3 software_mentions_client/client.py --repo-in /mnt/data/biblio/pmc_oa_dir/
 
 The default config file is `./config.json`, but could also be specified via the parameter `--config`: 
 
-> python3 software_mention_client.py --repo-in /mnt/data/biblio/pmc_oa_dir/ --config ./my_config.json
+> python3 software_mentions_client/client.py --repo-in /mnt/data/biblio/pmc_oa_dir/ --config ./my_config.json
 
 
 ### Processing a collection of PDF harvested by biblio-glutton-harvester
@@ -93,7 +108,7 @@ The default config file is `./config.json`, but could also be specified via the 
 
 * locally:
 
-> python3 software_mention_client.py --data-path /mnt/data/biblio-glutton-harvester/data/
+> python3 software_mentions_client/client.py --data-path /mnt/data/biblio-glutton-harvester/data/
 
 `--data-path` indicates the path to the repository of data harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester).
 

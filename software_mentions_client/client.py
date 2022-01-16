@@ -31,7 +31,7 @@ endpoint_txt = '/service/annotateSoftwareText'
 # default logging settings
 logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
 
-class software_mention_client(object):
+class software_mentions_client(object):
     """
     Python client for using the Softcite software mention service. 
     """
@@ -696,7 +696,7 @@ if __name__ == "__main__":
     full_diagnostic = args.diagnostic
     scorched_earth = args.scorched_earth
 
-    client = software_mention_client(config_path=config_path)
+    client = software_mentions_client(config_path=config_path)
 
     if not load_mongo and not client.service_isalive():
         sys.exit("Softcite software mention service not available, leaving...")
