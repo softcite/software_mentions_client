@@ -92,8 +92,7 @@ class software_mentions_client(object):
 
     def service_isalive(self):
         # test if Softcite software mention recognizer is up and running...
-        print(self.config['software_mention_url'])
-        the_url = self.config['software_mention_url']
+        the_url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
         if not the_url.endswith("/"):
             the_url += "/"
         the_url += "service/isalive"
@@ -379,7 +378,7 @@ class software_mentions_client(object):
             logging.exception("input file appears invalid: " + file_in)
             return
 
-        url = self.config["software_mention_url"]
+        url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
         if not url.endswith("/"):
             url += "/"
         url += endpoint_pdf
