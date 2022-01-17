@@ -2,6 +2,7 @@
     Run the software mention recognizer service on PDF collections
 '''
 
+import gzip
 import sys
 import os
 import shutil
@@ -130,10 +131,17 @@ class software_mentions_client(object):
         sys.stdout.flush()
 
         for root, directories, filenames in os.walk(directory):
-            for filename in filenames: 
-                if filename.endswith(".pdf") or filename.endswith(".PDF"):
+            for filename in filenames:
+                if filename.endswith(".pdf.gz"):
+                    _decompress(os.path.join(root, filename))
+
+        for root, directories, filenames in os.walk(directory):
+            for filename in filenames:
+                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz"):
                     if filename.endswith(".pdf"):
                         filename_json = filename.replace(".pdf", ".software.json")
+                    elif filename.endswith(".pdf.gz"):
+                        filename_json = filename.replace(".pdf.gz", ".software.json")
                     elif filename.endswith(".PDF"):
                         filename_json = filename.replace(".PDF", ".software.json")
 
@@ -373,7 +381,10 @@ class software_mentions_client(object):
 
     def annotate(self, file_in, file_out, full_record):
         try:
-            the_file = {'input': open(file_in, 'rb')}
+            if file_in.endswith('.pdf.gz'):
+                the_file = {'input': gzip.open(file_in, 'rb')}
+            else:
+                the_file = {'input': open(file_in, 'rb')}
         except:
             logging.exception("input file appears invalid: " + file_in)
             return
