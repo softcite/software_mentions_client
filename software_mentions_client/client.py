@@ -132,11 +132,6 @@ class software_mentions_client(object):
 
         for root, directories, filenames in os.walk(directory):
             for filename in filenames:
-                if filename.endswith(".pdf.gz"):
-                    _decompress(os.path.join(root, filename))
-
-        for root, directories, filenames in os.walk(directory):
-            for filename in filenames:
                 if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz"):
                     if filename.endswith(".pdf"):
                         filename_json = filename.replace(".pdf", ".software.json")
