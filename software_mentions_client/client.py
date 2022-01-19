@@ -389,11 +389,9 @@ class software_mentions_client(object):
             url += "/"
         url += endpoint_pdf
         
-        #print("calling... ", url)
         jsonObject = None
         try:
             response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=self.config["timeout"])
-            
             if response.status_code == 503:
                 logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
                 time.sleep(self.config['sleep_time'])
