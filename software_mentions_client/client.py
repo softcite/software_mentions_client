@@ -2,6 +2,7 @@
     Run the software mention recognizer service on PDF collections
 '''
 
+import gzip
 import sys
 import os
 import shutil
@@ -11,7 +12,7 @@ import lmdb
 import argparse
 import time
 import datetime
-import S3
+from software_mentions_client import S3
 import concurrent.futures
 import requests
 import pymongo
@@ -92,8 +93,7 @@ class software_mentions_client(object):
 
     def service_isalive(self):
         # test if Softcite software mention recognizer is up and running...
-        print(self.config['software_mention_url'])
-        the_url = self.config['software_mention_url']
+        the_url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
         if not the_url.endswith("/"):
             the_url += "/"
         the_url += "service/isalive"
@@ -131,10 +131,12 @@ class software_mentions_client(object):
         sys.stdout.flush()
 
         for root, directories, filenames in os.walk(directory):
-            for filename in filenames: 
-                if filename.endswith(".pdf") or filename.endswith(".PDF"):
+            for filename in filenames:
+                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz"):
                     if filename.endswith(".pdf"):
                         filename_json = filename.replace(".pdf", ".software.json")
+                    elif filename.endswith(".pdf.gz"):
+                        filename_json = filename.replace(".pdf.gz", ".software.json")
                     elif filename.endswith(".PDF"):
                         filename_json = filename.replace(".PDF", ".software.json")
 
@@ -374,21 +376,22 @@ class software_mentions_client(object):
 
     def annotate(self, file_in, file_out, full_record):
         try:
-            the_file = {'input': open(file_in, 'rb')}
+            if file_in.endswith('.pdf.gz'):
+                the_file = {'input': gzip.open(file_in, 'rb')}
+            else:
+                the_file = {'input': open(file_in, 'rb')}
         except:
             logging.exception("input file appears invalid: " + file_in)
             return
 
-        url = self.config["software_mention_url"]
+        url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
         if not url.endswith("/"):
             url += "/"
         url += endpoint_pdf
         
-        #print("calling... ", url)
         jsonObject = None
         try:
             response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=self.config["timeout"])
-            
             if response.status_code == 503:
                 logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
                 time.sleep(self.config['sleep_time'])
