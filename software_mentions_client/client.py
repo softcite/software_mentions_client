@@ -112,10 +112,10 @@ class software_mentions_client(object):
 
     def _init_lmdb(self):
         # open in write mode
-        envFilePath = os.path.join(self.config["lmdb_path"], 'entries_software')
+        envFilePath = os.path.join(self.config["data_path"], 'entries_software')
         self.env_software = lmdb.open(envFilePath, map_size=map_size)
 
-        #envFilePath = os.path.join(self.config["lmdb_path"], 'fail_software')
+        #envFilePath = os.path.join(self.config["data_path"], 'fail_software')
         #self.env_fail_software = lmdb.open(envFilePath, map_size=map_size)
 
     def annotate_directory(self, directory, force=False):
@@ -305,7 +305,7 @@ class software_mentions_client(object):
         # close environments
         self.env_software.close()
 
-        envFilePath = os.path.join(self.config["lmdb_path"], 'entries_software')
+        envFilePath = os.path.join(self.config["data_path"], 'entries_software')
         shutil.rmtree(envFilePath)
 
         # re-init the environments
