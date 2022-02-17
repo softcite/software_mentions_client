@@ -351,9 +351,13 @@ class software_mentions_client(object):
                     
                     # update metadata via biblio-glutton (this is to be done for mongo upload from file only)
                     if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip())>0:
-                        if 'metadata' in jsonObject and 'doi' in jsonObject['metadata']: 
+                        if 'metadata' in jsonObject and ('doi' in jsonObject['metadata'] or 'DOI' in jsonObject['metadata']): 
                             try:
-                                glutton_metadata = self.biblio_glutton_lookup(doi=jsonObject['metadata']['doi'])
+                                if 'doi' jsonObject['metadata']:
+                                    the_doi = jsonObject['metadata']['doi'].lower().strip()
+                                else:
+                                    the_doi = jsonObject['metadata']['DOI'].lower().strip()
+                                glutton_metadata = self.biblio_glutton_lookup(doi=the_doi)
                             except: 
                                 print("the call to biblio-glutton failed for", jsonObject['metadata']['doi'])
                                 failed += 1
@@ -366,8 +370,10 @@ class software_mentions_client(object):
                                 jsonObject['metadata'] = glutton_metadata
                                 self._insert_mongo(jsonObject)
                             else:
+                                print("glutton metadata is empty:", filename)
                                 failed += 1
                         else:
+                            print("no metadata found for ", filename)
                             failed += 1
 
         print("number of glutton metadata lookup failed:", failed)
