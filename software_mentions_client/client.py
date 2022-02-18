@@ -600,36 +600,58 @@ class software_mentions_client(object):
         """
         Lookup on biblio_glutton with the provided strong identifiers, return the full agregated biblio_glutton record
         """
-        if not "biblio_glutton_url" in self.config or len(self.config["biblio_glutton_url"].strip()) == 0:
-            return None
+        print("biblio_glutton_lookup")
 
-        biblio_glutton_url = self.config["biblio_glutton_url"]+"/service/lookup?"
         success = False
         jsonResult = None
 
-        if doi is not None and len(doi)>0:
-            response = requests.get(biblio_glutton_url, params={'doi': doi}, verify=False, timeout=5)
-            success = (response.status_code == 200)
-            if success:
-                jsonResult = response.json()
+        if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip()) > 0:
+            biblio_glutton_url = self.config["biblio_glutton_url"]+"/service/lookup?"
 
-        if not success and pmid is not None and len(pmid)>0:
-            response = requests.get(biblio_glutton_url + "pmid=" + pmid, verify=False, timeout=5)
-            success = (response.status_code == 200)
-            if success:
-                jsonResult = response.json()     
+            if doi is not None and len(doi)>0:
+                response = requests.get(biblio_glutton_url, params={'doi': doi}, verify=False, timeout=5)
+                success = (response.status_code == 200)
+                if success:
+                    jsonResult = response.json()
 
-        if not success and pmcid is not None and len(pmcid)>0:
-            response = requests.get(biblio_glutton_url + "pmc=" + pmcid, verify=False, timeout=5)  
-            success = (response.status_code == 200)
-            if success:
-                jsonResult = response.json()
+            if not success and pmid is not None and len(pmid)>0:
+                response = requests.get(biblio_glutton_url + "pmid=" + pmid, verify=False, timeout=5)
+                success = (response.status_code == 200)
+                if success:
+                    jsonResult = response.json()     
 
-        if not success and istex_id is not None and len(istex_id)>0:
-            response = requests.get(biblio_glutton_url + "istexid=" + istex_id, verify=False, timeout=5)
-            success = (response.status_code == 200)
-            if success:
-                jsonResult = response.json()
+            if not success and pmcid is not None and len(pmcid)>0:
+                response = requests.get(biblio_glutton_url + "pmc=" + pmcid, verify=False, timeout=5)  
+                success = (response.status_code == 200)
+                if success:
+                    jsonResult = response.json()
+
+            if not success and istex_id is not None and len(istex_id)>0:
+                response = requests.get(biblio_glutton_url + "istexid=" + istex_id, verify=False, timeout=5)
+                success = (response.status_code == 200)
+                if success:
+                    jsonResult = response.json()
+
+        if not success and doi is not None and len(doi)>0 and "crossref_base" in self.config and len(self.config["crossref_base"].strip())>0:
+            # let's call crossref as fallback for possible X-months gap in biblio-glutton
+            # https://api.crossref.org/works/10.1037/0003-066X.59.1.29
+            if "crossref_email" in self.config and len(self.config["crossref_email"].strip())>0:
+                user_agent = {'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0 (mailto:'+self.config["crossref_email"]+')'}
+            else:
+                user_agent = {'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0'}
+            try:
+                logging.info("calling... " + self.config["crossref_base"]+"/works/"+doi)
+                response = requests.get(self.config["crossref_base"]+"/works/"+doi, headers=user_agent, verify=False, timeout=5)
+                if response.status_code == 200:
+                    jsonResult = response.json()['message']
+                    # filter out references and re-set doi, in case there are obtained via crossref
+                    if "reference" in jsonResult:
+                        del jsonResult["reference"]
+                else:
+                    success = False
+                    jsonResult = None
+            except:
+                logging.exception("Could not connect to CrossRef")
         
         return jsonResult
 
@@ -709,6 +731,8 @@ if __name__ == "__main__":
         client.scorched_earth = True
 
     if load_mongo:
+        if data_path is None:
+            data_path = client.config["data_path"] 
         # check a mongodb server is specified in the config
         if client.config["mongo_host"] is None:
             sys.exit("the mongodb server where to load the json files is not indicated in the config file, leaving...")

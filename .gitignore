@@ -16,6 +16,7 @@ Thumbs.db
 /logs
 __pycache__
 my_config.json
+my_config_bso.json
 data/*
 !data/.gitkeep
 env
