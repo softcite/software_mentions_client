@@ -5,11 +5,21 @@ from setuptools import setup, find_packages
 with open('requirements.txt', 'r') as f:
     reqs = f.readlines()
 
-setup(name='software_mentions_client',
-      version='0.0.1',
-      description='software_mentions_client',
-      author='kermitt2',
-      packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
-      install_requires=reqs,
-      license='LICENSE',
-    )
+setup(
+    name="software_mentions_client",
+    version="0.1.0",
+    author="Patrice Lopez",
+    author_email="patrice.lopez@science-miner.com",
+    description="A client for extracting software mentions in scholar publications",
+    long_description=open("Readme.md", encoding='utf-8').read(),
+    long_description_content_type="text/markdown",
+    url='https://github.com/kermitt2/software_mentions_client',
+    packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+    python_requires='>=3.5',
+    install_requires=reqs,
+    classifiers=[
+        "Programming Language :: Python :: 3.5",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+    ],
+)

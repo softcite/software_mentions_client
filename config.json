@@ -7,7 +7,7 @@
     "region": "",
     "mongo_host": "localhost",
     "mongo_port": "27017",
-    "mongo_db": "softcite-covid",
+    "mongo_db": "softcite",
     "batch_size": 50,
     "sleep_time": 1,
     "concurrency": 8,

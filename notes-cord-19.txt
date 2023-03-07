@@ -1,4 +1,4 @@
-reharvested CORD-19 version 2021-07-26
+re-harvested CORD-19 version 2021-07-26
 
 ---
 total entries: 296686

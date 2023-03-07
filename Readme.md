@@ -1,5 +1,8 @@
 # Softcite software mention recognizer client
 
+[![PyPI version](https://badge.fury.io/py/software_mentions_client.svg)](https://badge.fury.io/py/software_mentions_client)
+[![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+
 Python client for using the Softcite software mention recognition service. It can be applied to 
 
 * individual PDF files
@@ -8,10 +11,9 @@ Python client for using the Softcite software mention recognition service. It ca
 
 * to a collection of documents harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and [article-dataset-builder](https://github.com/kermitt2/article-dataset-builder), with the benefit of re-using the collection manifest for injectng metadata and keeping track of progress. The collection can be stored locally or on a S3 storage. 
 
-
 ## Requirements
 
-The client has been tested with Python 3.5-3.7. 
+The client has been tested with Python 3.5-3.8. 
 
 The client requires a working [Softcite software mention recognition service](https://github.com/ourresearch/software-mentions). Service host and port can be changed in the `config.json` file of the client. 
 
@@ -26,22 +28,19 @@ It is advised to setup first a virtual environment to avoid falling into one of 
 
 ```console
 > virtualenv --system-site-packages -p python3 env
-```
-
-```console
 > source env/bin/activate
 ```
 
 Install the dependencies, use:
 
 ```console
-> pip3 install -r requirements.txt
+> python3 -m pip install -r requirements.txt
 ```
 
 Finally install the project in editable state
 
 ```console
-> pip3 install -e .
+> python3 -m pip install -e .
 ```
 
 
@@ -126,5 +125,7 @@ If a MongoDB server access information is indicated in the configuration file `c
 ## License and contact
 
 Distributed under [Apache 2.0 license](http://www.apache.org/licenses/LICENSE-2.0). The dependencies used in the project are either themselves also distributed under Apache 2.0 license or distributed under a compatible license. 
+
+If you contribute to Softcite software mention recognizer client project, you agree to share your contribution following these licenses. 
 
 Main author and contact: Patrice Lopez (<patrice.lopez@science-miner.com>)
