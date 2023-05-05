@@ -399,9 +399,16 @@ class software_mentions_client(object):
             elif file_in.endswith('.pdf') or file_in.endswith('.PDF'):
                 the_file = {'input': open(file_in, 'rb')}
                 url += endpoint_pdf
-            elif file_in.endswith('.xml'):
+            elif file_in.endswith('.tei.xml'):
                 the_file = {'input': open(file_in, 'rb')}
                 url += endpoint_tei
+            elif file_in.endswith('.xml'):
+                the_file = {'input': open(file_in, 'rb')}
+                # check if we have an XML file or a TEI file to select the best endpoint
+                if _is_tei(file_in):
+                    url += endpoint_tei
+                else:
+                    url += endpoint_xml
         except:
             logging.exception("input file appears invalid: " + file_in)
             return
@@ -690,6 +697,17 @@ def _clean_json(d):
         return [_clean_json(v) for v in d]
     return {k: _clean_json(v) for k, v in d.items()
             if not k.startswith("$") }
+
+def _is_tei(the_file):
+    # based on the header content of the file, check if we have a TEI XML file
+    with open(the_file) as f:
+        n = 5
+        while n>=0:
+            first_line = f.readline().strip('\n')
+            if "<TEI " in first_line or "<tei " in first_line or "<teiCorpus " in first_line:
+                return True
+            n -= 1
+    return False
 
 BUF_SIZE = 65536    
 
