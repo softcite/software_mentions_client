@@ -1,0 +1,3 @@
+include LICENSE Readme.md requirements.txt config.json 
+recursive-include *.txt
+recursive-exclude * __pycache__

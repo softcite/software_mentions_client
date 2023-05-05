@@ -12,7 +12,7 @@ import lmdb
 import argparse
 import time
 import datetime
-from software_mentions_client import S3
+from article_dataset_builder.S3 import S3
 import concurrent.futures
 import requests
 import pymongo
@@ -22,12 +22,15 @@ import copyreg
 import types
 import logging
 import logging.handlers
+import pkgutil
 
 map_size = 100 * 1024 * 1024 * 1024 
 
 # default endpoint
 endpoint_pdf = 'service/annotateSoftwarePDF'
 endpoint_txt = 'service/annotateSoftwareText'
+endpoint_xml = 'service/annotateSoftwareXML'
+endpoint_tei = 'service/annotateSoftwareTEI'
 
 # default logging settings
 logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
@@ -46,18 +49,22 @@ class software_mentions_client(object):
         self._load_config(config_path)
         self._init_lmdb()
 
-        if self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
+        if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
             self.s3 = S3.S3(self.config)
 
         self.mongo_db = None
 
         # load blacklist 
         self.blacklisted = []
-        with open ("resources/covid_blacklist.txt", "r") as blackfile:
-            for line in blackfile:
-                line = line.replace(" ", "").strip()
-                if not line.startswith("#"):
-                    self.blacklisted.append(line)
+
+        blacktext = pkgutil.get_data(__name__, "resources/covid_blacklist.txt").decode()
+        blacktext_lines = blacktext.split("\n")
+
+        #with open ("resources/covid_blacklist.txt", "r") as blackfile:
+        for line in blacktext_lines:
+            line = line.replace(" ", "").strip()
+            if not line.startswith("#"):
+                self.blacklisted.append(line)
         logging.info("blacklist size: " + str(len(self.blacklisted)))
 
         self.scorched_earth = False
@@ -93,7 +100,7 @@ class software_mentions_client(object):
 
     def service_isalive(self):
         # test if Softcite software mention recognizer is up and running...
-        the_url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
+        the_url = self.config["software_mention_url"]
         if not the_url.endswith("/"):
             the_url += "/"
         the_url += "service/isalive"
@@ -119,7 +126,9 @@ class software_mentions_client(object):
         #self.env_fail_software = lmdb.open(envFilePath, map_size=map_size)
 
     def annotate_directory(self, directory, force=False):
-        # recursive directory walk for all pdf documents
+        '''
+        recursive directory walk for processing in parallel all PDF and XML documents
+        '''
         pdf_files = []
         out_files = []
         full_records = []
@@ -132,13 +141,15 @@ class software_mentions_client(object):
 
         for root, directories, filenames in os.walk(directory):
             for filename in filenames:
-                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz"):
+                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz") or filename.endswith(".xml"):
                     if filename.endswith(".pdf"):
                         filename_json = filename.replace(".pdf", ".software.json")
                     elif filename.endswith(".pdf.gz"):
                         filename_json = filename.replace(".pdf.gz", ".software.json")
                     elif filename.endswith(".PDF"):
                         filename_json = filename.replace(".PDF", ".software.json")
+                    elif filename.endswith(".xml"):
+                        filename_json = filename.replace(".xml", ".software.json")
 
                     sha1 = getSHA1(os.path.join(root,filename))
 
@@ -179,10 +190,13 @@ class software_mentions_client(object):
             self.annotate_batch(pdf_files, out_files, full_records)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " file/s  ")
             sys.stdout.flush()
 
     def annotate_collection(self, data_path, force=False):
+        '''
+        Annotate a collection harvested by biblio_glutton_harvester or article_dataset_builder, only PDF for the moment
+        '''
         # init lmdb transactions
         # open in read mode
         envFilePath = os.path.join(data_path, 'entries')
@@ -322,7 +336,7 @@ class software_mentions_client(object):
         for root, directories, filenames in os.walk(directory):
             for filename in filenames: 
                 if filename.endswith(".software.json"):
-                    #print(os.path.join(root,filename))
+                    print(os.path.join(root,filename))
                     the_json = open(os.path.join(root,filename)).read()
                     try:
                         jsonObject = json.loads(the_json)
@@ -375,19 +389,22 @@ class software_mentions_client(object):
         print("number of glutton metadata lookup failed:", failed)
 
     def annotate(self, file_in, file_out, full_record):
+        url = self.config["software_mention_url"]
+        if not url.endswith("/"):
+            url += "/"
         try:
             if file_in.endswith('.pdf.gz'):
                 the_file = {'input': gzip.open(file_in, 'rb')}
-            else:
+                url += endpoint_pdf
+            elif file_in.endswith('.pdf') or file_in.endswith('.PDF'):
                 the_file = {'input': open(file_in, 'rb')}
+                url += endpoint_pdf
+            elif file_in.endswith('.xml'):
+                the_file = {'input': open(file_in, 'rb')}
+                url += endpoint_tei
         except:
             logging.exception("input file appears invalid: " + file_in)
             return
-
-        url = f'http://{self.config["software_mention_host"]}:{self.config["software_mention_port"]}'
-        if not url.endswith("/"):
-            url += "/"
-        url += endpoint_pdf
         
         jsonObject = None
         try:
@@ -508,7 +525,7 @@ class software_mentions_client(object):
                     self.mongo_db = mongo_client[self.config["mongo_db"]]
 
             if self.mongo_db is None:
-                print("MongoDB server is not available")    
+                print("MongoDB server is not available for more advanced statistics")    
                 return
 
             print("MongoDB - number of documents: ", self.mongo_db.documents.count_documents({}))
@@ -719,7 +736,7 @@ if __name__ == "__main__":
 
     client = software_mentions_client(config_path=config_path)
 
-    if not load_mongo and not client.service_isalive():
+    if not load_mongo and not full_diagnostic and not client.service_isalive():
         sys.exit("Softcite software mention service not available, leaving...")
 
     force = False
@@ -731,19 +748,19 @@ if __name__ == "__main__":
         client.scorched_earth = True
 
     if load_mongo:
-        if data_path is None:
-            data_path = client.config["data_path"] 
         # check a mongodb server is specified in the config
         if client.config["mongo_host"] is None:
             sys.exit("the mongodb server where to load the json files is not indicated in the config file, leaving...")
-        if repo_in is None and data_path is None: 
-            sys.exit("the repo_in where to find the PDF files to be processed is not indicated, leaving...")
-        if data_path is not None:
-            client.load_mongo(data_path)
-        elif repo_in is not None:
+
+        if repo_in is not None:
             client.load_mongo(repo_in)
-    elif full_diagnostic:
-        client.diagnostic(full_diagnostic=True)
+        elif data_path is None and len(client.config["data_path"])>0:
+            data_path = client.config["data_path"] 
+            if repo_in is None and (data_path is None or len(client.config["data_path"])==0): 
+                sys.exit("the repo_in where to find the PDF files to be processed is not indicated, leaving...")
+            if data_path is not None:
+                client.load_mongo(data_path)
+        
     elif reprocess:
         client.reprocess_failed()
     elif repo_in is not None: 
@@ -755,5 +772,7 @@ if __name__ == "__main__":
 
     if not full_diagnostic:
         client.diagnostic(full_diagnostic=False)
+    else:
+        client.diagnostic(full_diagnostic=True)
     
     

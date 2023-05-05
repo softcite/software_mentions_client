@@ -7,7 +7,7 @@ with open('requirements.txt', 'r') as f:
 
 setup(
     name="software_mentions_client",
-    version="0.1.0",
+    version="0.1.6",
     author="Patrice Lopez",
     author_email="patrice.lopez@science-miner.com",
     description="A client for extracting software mentions in scholar publications",
@@ -17,6 +17,7 @@ setup(
     packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     python_requires='>=3.5',
     install_requires=reqs,
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3.5",
         "License :: OSI Approved :: Apache Software License",
