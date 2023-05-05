@@ -136,7 +136,7 @@ class software_mentions_client(object):
         start_time = time.time()
 
         print("\n")
-        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 PDF/s")
+        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 files/s")
         sys.stdout.flush()
 
         for root, directories, filenames in os.walk(directory):
@@ -183,14 +183,14 @@ class software_mentions_client(object):
                         out_files = []
                         full_records = []
                         runtime = round(time.time() - start_time, 3)
-                        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+                        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
                         sys.stdout.flush()
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " file/s  ")
+            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
             sys.stdout.flush()
 
     def annotate_collection(self, data_path, force=False):
@@ -213,7 +213,7 @@ class software_mentions_client(object):
         nb_total = 0
         start_time = time.time()
 
-        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 PDF/s")
+        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: 0 s - 0 files/s")
         sys.stdout.flush()
 
         with self.env.begin(write=True) as txn:
@@ -251,14 +251,14 @@ class software_mentions_client(object):
                     out_files = []
                     full_records = []
                     runtime = round(time.time() - start_time, 3)
-                    sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+                    sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
                     sys.stdout.flush()
 
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " PDF/s  ")
+            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
             sys.stdout.flush()
 
     def annotate_batch(self, pdf_files, out_files=None, full_records=None):
