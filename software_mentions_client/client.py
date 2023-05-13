@@ -185,6 +185,7 @@ class software_mentions_client(object):
                         runtime = round(time.time() - start_time, 3)
                         sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
                         sys.stdout.flush()
+
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
@@ -269,7 +270,7 @@ class software_mentions_client(object):
             # client is not cpu bounded but io bounded, so normally it's still okay with threads and GIL
             executor.map(self.annotate, pdf_files, out_files, full_records, timeout=self.config["timeout"])
 
-    def reprocess_failed(self):
+    def reprocess_failed(self, directory):
         """
         we reprocess only files which have led to a failure of the service, we don't reprocess documents
         where no software mention has been found 
@@ -279,35 +280,105 @@ class software_mentions_client(object):
         full_records = []
         i = 0
         nb_total = 0
-        with self.env_software.begin() as txn:
-            cursor = txn.cursor()
-            for key, value in cursor:
-                nb_total += 1
-                result = value.decode(encoding='UTF-8')
-                local_id = key.decode(encoding='UTF-8')
-                if result == "False":
-                    # reprocess
-                    logging.info("reprocess " + local_id)
-                    pdf_files.append(os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".pdf"))
-                    out_files.append(os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".software.json"))
-                    # get the full record from the data_path env
-                    json_file = os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".json")
-                    if os.path.isfile(json_file):
-                        with open(json_file) as f:
-                            full_record = json.load(f)
-                        full_records.append(full_record)
-                    i += 1
+        start_time = time.time()
+        if directory == None:
+            with self.env_software.begin() as txn:
+                cursor = txn.cursor()
+                for key, value in cursor:
+                    nb_total += 1
+                    result = value.decode(encoding='UTF-8')
+                    local_id = key.decode(encoding='UTF-8')
+                    if result == "False":
+                        # reprocess
+                        logging.info("reprocess " + local_id)
 
-            if i == self.config["batch_size"]:
-                self.annotate_batch(pdf_files, out_files, full_records)
-                pdf_files = []
-                out_files = []
-                full_records = []
-                i = 0
+                        input_file = os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".pdf")
+                        if os.path.exists(input_file):
+                            pdf_files.append(input_file)
+                        else:
+                            input_file = os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".tei.xml")
+                        if os.path.exists(input_file):
+                            pdf_files.append(input_file)
+                        else:
+                            input_file = os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".xml")
+                        if os.path.exists(input_file):
+                            pdf_files.append(input_file)
+                        # note: pdf.gz might be missing
 
-        # last batch
+                        out_files.append(os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".software.json"))
+                        # get the full record from the data_path env
+                        json_file = os.path.join(data_path, generateStoragePath(local_id), local_id, local_id+".json")
+                        if os.path.isfile(json_file):
+                            with open(json_file) as f:
+                                full_record = json.load(f)
+                            full_records.append(full_record)
+                        i += 1
+
+                    if i == self.config["batch_size"]:
+                        self.annotate_batch(pdf_files, out_files, full_records)
+                        nb_total += len(pdf_files)
+                        pdf_files = []
+                        out_files = []
+                        full_records = []
+                        i = 0
+                        sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+                        sys.stdout.flush()
+        else:
+            for root, directories, filenames in os.walk(directory):
+                for filename in filenames:
+                    if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz") or filename.endswith(".xml"):
+                        if filename.endswith(".pdf"):
+                            filename_json = filename.replace(".pdf", ".software.json")
+                        elif filename.endswith(".pdf.gz"):
+                            filename_json = filename.replace(".pdf.gz", ".software.json")
+                        elif filename.endswith(".PDF"):
+                            filename_json = filename.replace(".PDF", ".software.json")
+                        elif filename.endswith(".xml"):
+                            filename_json = filename.replace(".xml", ".software.json")
+
+                        # if the json file already exists, we skip 
+                        if os.path.isfile(os.path.join(root, filename_json)):
+                            continue
+
+                        sha1 = getSHA1(os.path.join(root,filename))
+
+                        pdf_files.append(os.path.join(root,filename))
+                        out_files.append(os.path.join(root, filename_json))
+
+                        json_file = os.path.join(root, filename.replace(".xml", ".json"))
+                        if os.path.isfile(json_file):
+                            with open(json_file) as f:
+                                full_record = json.load(f)
+                            if full_record["id"] == sha1:
+                                full_records.append(full_record)
+                            else:
+                                record = {}
+                                record["id"] = sha1
+                                full_records.append(record)
+                        else:
+                            record = {}
+                            record["id"] = sha1
+                            full_records.append(record)
+                        i += 1
+
+                    if i == self.config["batch_size"]:
+                        self.annotate_batch(pdf_files, out_files, full_records)
+                        nb_total += len(pdf_files)
+                        pdf_files = []
+                        out_files = []
+                        full_records = []
+                        i = 0
+                        runtime = round(time.time() - start_time, 3)
+                        sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+                        sys.stdout.flush()
+
+        # last batch for every cases
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
+            nb_total += len(pdf_files)
+            runtime = round(time.time() - start_time, 3)
+            sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+            sys.stdout.flush()
 
         logging.info("re-processed: " + str(nb_total) + " entries")
 
@@ -780,7 +851,7 @@ if __name__ == "__main__":
                 client.load_mongo(data_path)
         
     elif reprocess:
-        client.reprocess_failed()
+        client.reprocess_failed(repo_in)
     elif repo_in is not None: 
         client.annotate_directory(repo_in, force)
     elif file_in is not None:
