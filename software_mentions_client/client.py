@@ -569,9 +569,11 @@ class software_mentions_client(object):
             except:
                 logging.exception("Error while deleting file " + file_in)
 
-    def diagnostic(self, full_diagnostic=False):
+    def diagnostic(self, full_diagnostic_mongo=False, full_diagnostic_files=False, directory=None):
         """
-        Print a report on failures stored during the harvesting process
+        Print a report on annotation produced during the processing. If annotations are loaded
+        in MongoDB, use full_diagnostic_mongo=True to take advantage of mongodb queries.
+        Otherwise, the statistics will be produced using the files, which will be much slower. 
         """
         nb_total = 0
         nb_fail = 0
@@ -595,7 +597,7 @@ class software_mentions_client(object):
         print("total failed:", nb_fail)
         print("---")
 
-        if full_diagnostic:
+        if full_diagnostic_mongo:
             # check mongodb access - if mongodb is not used or available, we don't go further
             if self.mongo_db is None:
                 if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
@@ -643,6 +645,113 @@ class software_mentions_client(object):
             result = self.mongo_db.references.find( {"tei": {"$regex": "PMC"}} )
             print("\t  * with PMC ID:", result.count())  
             print("---")
+        elif full_diagnostic_files:
+            # in this mode, we go through the produced json files to retrieve information
+            # this is slower but applies without loading annotations to mongodb
+            nb_ref = 0
+            nb_ref_marker = 0
+            nb_ref_with_doi = 0
+            nb_ref_with_pmid = 0
+            nb_ref_with_pmcid = 0
+
+            nb_software = 0
+            nb_publisher = 0
+            nb_url = 0
+            nb_version = 0
+            nb_language = 0
+            nb_environment = 0
+            nb_component = 0
+            nb_implicit = 0
+
+            nb_software_with_ref = 0
+
+            nb_documents = 0
+            nb_documents_with_software = 0
+            nbFiles = 0
+
+            for root, directories, filenames in os.walk(directory):
+                
+                for filename in filenames: 
+                    if filename.endswith(".software.json"):
+                        nb_documents += 1
+                        #print(os.path.join(root,filename))
+                        the_json = open(os.path.join(root,filename)).read()
+                        try:
+                            jsonObject = json.loads(the_json)
+                        except:
+                            print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                            continue
+
+                        nbFiles += 1
+
+                        if nbFiles % 100 == 0:
+                            sys.stdout.write("\rFiles visited: %i" % nbFiles)
+                            sys.stdout.flush()
+
+                        if "mentions" in jsonObject and len(jsonObject["mentions"])>0:
+                            nb_documents_with_software += 1
+
+                        for mention in jsonObject["mentions"]:
+                            if "type" in mention:
+                                if mention["type"] == "software":
+                                    nb_software += 1
+                            if "software-type" in mention:
+                                if mention["software-type"] == "environment":
+                                    nb_environment += 1
+                                elif mention["software-type"] == "implicit":
+                                    nb_implicit += 1
+                                elif mention["software-type"] == "component":
+                                    nb_component += 1
+
+                            if "publisher" in mention:
+                                nb_publisher += 1
+                            if "version" in mention:
+                                nb_version += 1
+                            if "language" in mention:
+                                nb_language += 1
+                            if "url" in mention:
+                                nb_url += 1
+
+                            if "references" in mention:
+                                nb_ref_marker += len(mention["references"])
+
+                        if "references" in jsonObject and len(jsonObject["references"])>0:
+                            nb_software_with_ref += 1
+                            nb_ref += len(jsonObject["references"])
+
+                            # like with mongodb queries, we can use simple matching to count PID in full references
+                            for reference in jsonObject["references"]:
+                                if "tei" in reference:
+                                    reference_xml = reference["tei"]
+                                    if "DOI" in reference_xml:
+                                        nb_ref_with_doi += 1
+                                    if "PMID" in reference_xml:
+                                        nb_ref_with_pmid += 1
+                                    if "PMCID" in reference_xml:
+                                        nb_ref_with_pmcid += 1
+
+            # report results
+            print("\n\n---") 
+            print("JSON files - number of documents: ", nb_documents)
+            print("JSON files - number of software mentions: ", nb_software)
+            nb_standalone = nb_software - (nb_environment + nb_component + nb_implicit)
+            print("\t     -> subtype standalone:", nb_standalone)
+            print("\t     -> subtype environment:", nb_environment)
+            print("\t     -> subtype component:", nb_component)
+            print("\t     -> subtype implicit:", nb_implicit)
+            print("\t     * with software name:", nb_software)
+            print("\t     * with version:", nb_version)
+            print("\t     * with publisher:", nb_publisher)
+            print("\t     * with url:", nb_url) 
+            print("\t     * with programming language:", nb_language) 
+            print("\t     * with at least one reference", nb_software_with_ref) 
+            print("---") 
+            print("JSON files - number of bibliographical reference markers: ", nb_ref_marker)
+            print("JSON files - number of bibliographical references: ", nb_ref)
+            print("\t      * with DOI:", nb_ref_with_doi)  
+            print("\t      * with PMID:", nb_ref_with_pmid)  
+            print("\t      * with PMC ID:", nb_ref_with_pmcid)  
+            print("---")                
 
     def _insert_mongo(self, jsonObject):
         if self.mongo_db is None:
@@ -805,8 +914,10 @@ if __name__ == "__main__":
     parser.add_argument("--reset", action="store_true", help="ignore previous processing states and re-init the annotation process from the beginning") 
     parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
         +"to the directory of resulting json files to be loaded, --dump must indicate the path to the json dump file of document metadata") 
-    parser.add_argument("--diagnostic", action="store_true", help="perform a full count of annotations and diagnostic using MongoDB "  
-        +"regarding the harvesting and transformation process") 
+    parser.add_argument("--diagnostic-mongo", action="store_true", help="perform a full count of annotations and diagnostic using MongoDB "  
+        +"regarding the harvesting and annotation process") 
+    parser.add_argument("--diagnostic-files", action="store_true", help="perform a full count of annotations and diagnostic using repository files "  
+        +"regarding the harvesting and annotation process") 
     parser.add_argument("--scorched-earth", action="store_true", help="remove a PDF file after its sucessful processing in order to save storage space" 
         +", careful with this!") 
 
@@ -820,12 +931,13 @@ if __name__ == "__main__":
     file_out = args.file_out
     repo_in = args.repo_in
     load_mongo = args.load
-    full_diagnostic = args.diagnostic
+    full_diagnostic_mongo = args.diagnostic_mongo
+    full_diagnostic_files = args.diagnostic_files
     scorched_earth = args.scorched_earth
 
     client = software_mentions_client(config_path=config_path)
 
-    if not load_mongo and not full_diagnostic and not client.service_isalive():
+    if not load_mongo and not full_diagnostic_mongo and not full_diagnostic_files and not client.service_isalive():
         sys.exit("Softcite software mention service not available, leaving...")
 
     force = False
@@ -852,16 +964,13 @@ if __name__ == "__main__":
         
     elif reprocess:
         client.reprocess_failed(repo_in)
-    elif repo_in is not None: 
+    elif repo_in is not None and not full_diagnostic_files: 
         client.annotate_directory(repo_in, force)
     elif file_in is not None:
         client.annotate(file_in, file_out, None)
     elif data_path is not None: 
         client.annotate_collection(data_path, force)
 
-    if not full_diagnostic:
-        client.diagnostic(full_diagnostic=False)
-    else:
-        client.diagnostic(full_diagnostic=True)
+    client.diagnostic(full_diagnostic_mongo=full_diagnostic_mongo, full_diagnostic_files=full_diagnostic_files, directory=repo_in)
     
     
