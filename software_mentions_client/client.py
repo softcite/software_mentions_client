@@ -648,6 +648,8 @@ class software_mentions_client(object):
         elif full_diagnostic_files:
             # in this mode, we go through the produced json files to retrieve information
             # this is slower but applies without loading annotations to mongodb
+
+            # for software
             nb_ref = 0
             nb_ref_marker = 0
             nb_ref_with_doi = 0
@@ -663,11 +665,31 @@ class software_mentions_client(object):
             nb_component = 0
             nb_implicit = 0
 
-            nb_software_with_ref = 0
+            nb_software_mention_with_ref = 0
 
             nb_documents = 0
             nb_documents_with_software = 0
-            nbFiles = 0
+            nbSoftwareFiles = 0
+
+            # for datasets
+            nb_dataset_ref = 0
+            nb_dataset_ref_marker = 0
+            nb_dataset_ref_with_doi = 0
+            nb_dataset_ref_with_pmid = 0
+            nb_dataset_ref_with_pmcid = 0
+
+            nb_dataset_implicit = 0
+            nb_dataset_name = 0
+            nb_data_device = 0
+            nb_dataset_publisher = 0
+            nb_dataset_url = 0
+            nb_dataset_version = 0
+           
+            nb_dataset_mention_with_ref = 0
+
+            nb_dataset_documents = 0
+            nb_documents_with_dataset = 0
+            nbDatasetFiles = 0
 
             for root, directories, filenames in os.walk(directory):
                 
@@ -682,10 +704,10 @@ class software_mentions_client(object):
                             print("the json parsing of the following file failed: ", os.path.join(root,filename))
                             continue
 
-                        nbFiles += 1
+                        nbSoftwareFiles += 1
 
-                        if nbFiles % 100 == 0:
-                            sys.stdout.write("\rFiles visited: %i" % nbFiles)
+                        if nbSoftwareFiles % 100 == 0:
+                            sys.stdout.write("\rFiles visited: %i" % nbSoftwareFiles)
                             sys.stdout.flush()
 
                         if "mentions" in jsonObject and len(jsonObject["mentions"])>0:
@@ -714,9 +736,9 @@ class software_mentions_client(object):
 
                             if "references" in mention:
                                 nb_ref_marker += len(mention["references"])
+                                nb_software_mention_with_ref += 1
 
                         if "references" in jsonObject and len(jsonObject["references"])>0:
-                            nb_software_with_ref += 1
                             nb_ref += len(jsonObject["references"])
 
                             # like with mongodb queries, we can use simple matching to count PID in full references
@@ -730,28 +752,102 @@ class software_mentions_client(object):
                                     if "PMCID" in reference_xml:
                                         nb_ref_with_pmcid += 1
 
+                    elif filename.endswith(".dataset.json"):
+                        nb_dataset_documents += 1
+                        #print(os.path.join(root,filename))
+                        the_json = open(os.path.join(root,filename)).read()
+                        try:
+                            jsonObject = json.loads(the_json)
+                        except:
+                            print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                            continue
+
+                        nbDatasetFiles += 1
+
+                        if nbDatasetFiles % 100 == 0:
+                            sys.stdout.write("\rFiles visited: %i" % nbDatasetFiles)
+                            sys.stdout.flush()
+
+                        if "mentions" in jsonObject and len(jsonObject["mentions"])>0:
+                            nb_documents_with_dataset += 1
+
+                        for mention in jsonObject["mentions"]:
+                            if "type" in mention:
+                                if mention["type"] == "dataset-implicit":
+                                    nb_dataset_implicit += 1
+                                elif mention["type"] == "dataset-name":
+                                    nb_dataset_name += 1
+                            
+                            if mention["type"] == "data-device" or "data-device" in mention:
+                                nb_data_device += 1
+
+                            if "publisher" in mention:
+                                nb_dataset_publisher += 1
+                            if "version" in mention:
+                                nb_dataset_version += 1
+                            if "url" in mention:
+                                nb_dataset_url += 1
+
+                            if "references" in mention:
+                                nb_dataset_ref_marker += len(mention["references"])
+                                nb_dataset_mention_with_ref += 1
+
+                        if "references" in jsonObject and len(jsonObject["references"])>0:
+                            
+                            nb_dataset_ref += len(jsonObject["references"])
+
+                            # like with mongodb queries, we can use simple matching to count PID in full references
+                            for reference in jsonObject["references"]:
+                                if "tei" in reference:
+                                    reference_xml = reference["tei"]
+                                    if "DOI" in reference_xml:
+                                        nb_dataset_ref_with_doi += 1
+                                    if "PMID" in reference_xml:
+                                        nb_dataset_ref_with_pmid += 1
+                                    if "PMCID" in reference_xml:
+                                        nb_dataset_ref_with_pmcid += 1
+
             # report results
-            print("\n\n---") 
-            print("JSON files - number of documents: ", nb_documents)
-            print("JSON files - number of software mentions: ", nb_software)
-            nb_standalone = nb_software - (nb_environment + nb_component + nb_implicit)
-            print("\t     -> subtype standalone:", nb_standalone)
-            print("\t     -> subtype environment:", nb_environment)
-            print("\t     -> subtype component:", nb_component)
-            print("\t     -> subtype implicit:", nb_implicit)
-            print("\t     * with software name:", nb_software)
-            print("\t     * with version:", nb_version)
-            print("\t     * with publisher:", nb_publisher)
-            print("\t     * with url:", nb_url) 
-            print("\t     * with programming language:", nb_language) 
-            print("\t     * with at least one reference", nb_software_with_ref) 
-            print("---") 
-            print("JSON files - number of bibliographical reference markers: ", nb_ref_marker)
-            print("JSON files - number of bibliographical references: ", nb_ref)
-            print("\t      * with DOI:", nb_ref_with_doi)  
-            print("\t      * with PMID:", nb_ref_with_pmid)  
-            print("\t      * with PMC ID:", nb_ref_with_pmcid)  
-            print("---")                
+            if nb_documents > 0:
+                print("\n\n--- SOFTWARE MENTIONS ---") 
+                print("JSON files - number of documents: ", nb_documents)
+                print("JSON files - number of documents with at least one software mention: ", nb_documents_with_software)
+                print("JSON files - number of software mentions: ", nb_software)
+                nb_standalone = nb_software - (nb_environment + nb_component + nb_implicit)
+                print("\t     -> subtype standalone:", nb_standalone)
+                print("\t     -> subtype environment:", nb_environment)
+                print("\t     -> subtype component:", nb_component)
+                print("\t     -> subtype implicit:", nb_implicit)
+                print("\t     * with software name:", nb_software)
+                print("\t     * with version:", nb_version)
+                print("\t     * with publisher:", nb_publisher)
+                print("\t     * with url:", nb_url) 
+                print("\t     * with programming language:", nb_language) 
+                print("\t     * mentions with at least one reference", nb_software_mention_with_ref) 
+                print("---") 
+                print("JSON files - number of bibliographical reference markers: ", nb_ref_marker)
+                print("JSON files - number of bibliographical references: ", nb_ref)
+                print("\t      * with DOI:", nb_ref_with_doi)  
+                print("\t      * with PMID:", nb_ref_with_pmid)  
+                print("\t      * with PMC ID:", nb_ref_with_pmcid)  
+                print("---")              
+
+            if nb_dataset_documents > 0:
+                print("\n\n--- DATASET MENTIONS ---") 
+                print("JSON files - number of documents: ", nb_dataset_documents)
+                print("JSON files - number of documents with at least one dataset mention: ", nb_documents_with_dataset)
+                print("JSON files - number of named dataset mentions: ", nb_dataset_name)
+                print("JSON files - number of implicit dataset mentions: ", nb_dataset_implicit)
+                print("JSON files - number of data device mentions: ", nb_data_device)
+                print("\t     * with url:", nb_dataset_url) 
+                print("\t     * mentions with at least one reference", nb_dataset_mention_with_ref) 
+                print("---") 
+                print("JSON files - number of bibliographical reference markers: ", nb_dataset_ref_marker)
+                print("JSON files - number of bibliographical references: ", nb_dataset_ref)
+                print("\t      * with DOI:", nb_dataset_ref_with_doi)  
+                print("\t      * with PMID:", nb_dataset_ref_with_pmid)  
+                print("\t      * with PMC ID:", nb_dataset_ref_with_pmcid)  
+                print("---") 
 
     def _insert_mongo(self, jsonObject):
         if self.mongo_db is None:
