@@ -12,7 +12,7 @@ import lmdb
 import argparse
 import time
 import datetime
-from article_dataset_builder.S3 import S3
+import software_mentions_client.S3
 import concurrent.futures
 import requests
 import pymongo
