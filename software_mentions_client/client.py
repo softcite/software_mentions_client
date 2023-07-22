@@ -1,5 +1,5 @@
 '''
-    Run the software mention recognizer service on PDF collections
+Run the software mention recognizer service on PDF or XML fulltext file collections
 '''
 
 import gzip
@@ -164,7 +164,7 @@ class software_mentions_client(object):
                         continue
 
                     # if identifier already processed successfully in the local lmdb, we skip
-                    # the hash of the PDF file is used as unique identifier for the PDF (SHA1)
+                    # the hash of the fulltext file is used as unique identifier for the document (SHA1)
                     with self.env_software.begin() as txn:
                         status = txn.get(sha1.encode(encoding='UTF-8'))
                         if status is not None and not force:
@@ -196,7 +196,8 @@ class software_mentions_client(object):
 
     def annotate_collection(self, data_path, force=False):
         '''
-        Annotate a collection harvested by biblio_glutton_harvester or article_dataset_builder, only PDF for the moment
+        Annotate a collection of fulltexts harvested by biblio_glutton_harvester or article_dataset_builder. 
+        The documents can be PDF or XML (TEI or other publisher XML format supported by Pub2TEI, e.g. JATS) 
         '''
         # init lmdb transactions
         # open in read mode
@@ -563,7 +564,7 @@ class software_mentions_client(object):
                     txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
 
         if self.scorched_earth and jsonObject is not None:
-            # processed is done, remove local PDF file
+            # processed is done, remove local document file
             try:
                 os.remove(file_in) 
             except:
@@ -1001,12 +1002,12 @@ def getSHA1(the_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Softcite software mention recognizer client")
-    parser.add_argument("--repo-in", default=None, help="path to a directory of PDF files to be processed by the Softcite software mention recognizer")  
-    parser.add_argument("--file-in", default=None, help="a single PDF input file to be processed by the Softcite software mention recognizer") 
+    parser.add_argument("--repo-in", default=None, help="path to a directory of PDF or XML fulltext files to be processed by the Softcite software mention recognizer")  
+    parser.add_argument("--file-in", default=None, help="a single PDF or XML input file to be processed by the Softcite software mention recognizer") 
     parser.add_argument("--file-out", default=None, help="path to a single output the software mentions in JSON format, extracted from the PDF file-in") 
     parser.add_argument("--data-path", default=None, help="path to the resource files created/harvested by biblio-glutton-harvester") 
     parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json") 
-    parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF") 
+    parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF or XML fulltexts") 
     parser.add_argument("--reset", action="store_true", help="ignore previous processing states and re-init the annotation process from the beginning") 
     parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
         +"to the directory of resulting json files to be loaded, --dump must indicate the path to the json dump file of document metadata") 
@@ -1014,7 +1015,7 @@ if __name__ == "__main__":
         +"regarding the harvesting and annotation process") 
     parser.add_argument("--diagnostic-files", action="store_true", help="perform a full count of annotations and diagnostic using repository files "  
         +"regarding the harvesting and annotation process") 
-    parser.add_argument("--scorched-earth", action="store_true", help="remove a PDF file after its sucessful processing in order to save storage space" 
+    parser.add_argument("--scorched-earth", action="store_true", help="remove the PDF or XML fulltext files file after their sucessful processing in order to save storage space" 
         +", careful with this!") 
 
     args = parser.parse_args()
@@ -1054,7 +1055,7 @@ if __name__ == "__main__":
         elif data_path is None and len(client.config["data_path"])>0:
             data_path = client.config["data_path"] 
             if repo_in is None and (data_path is None or len(client.config["data_path"])==0): 
-                sys.exit("the repo_in where to find the PDF files to be processed is not indicated, leaving...")
+                sys.exit("the repo_in where to find the PDF or XML fulltext files to be processed is not indicated, leaving...")
             if data_path is not None:
                 client.load_mongo(data_path)
         
