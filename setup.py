@@ -7,7 +7,7 @@ with open('requirements.txt', 'r') as f:
 
 setup(
     name="software_mentions_client",
-    version="0.1.8",
+    version="0.1.9",
     author="Patrice Lopez",
     author_email="patrice.lopez@science-miner.com",
     description="A client for extracting software mentions in scholar publications",
