@@ -151,6 +151,14 @@ class software_mentions_client(object):
                     elif filename.endswith(".xml"):
                         filename_json = filename.replace(".xml", ".software.json")
 
+                    # prioretize TEI XML because better quality and faster
+                    filename_tei1 = os.path.join(root, filename_json.replace(".software.json", ".pub2tei.tei.xml"))
+                    filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".pub2tei.tei.xml"))
+                    if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                        # we have a TEI file, so if the current filename is not this TEI, we skip
+                        if not filename.endswith(".tei.xml"):
+                            continue
+
                     sha1 = getSHA1(os.path.join(root,filename))
 
                     # if the json file already exists and not force, we skip 
