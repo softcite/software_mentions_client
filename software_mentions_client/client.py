@@ -354,7 +354,15 @@ class software_mentions_client(object):
                         pdf_files.append(os.path.join(root,filename))
                         out_files.append(os.path.join(root, filename_json))
 
-                        json_file = os.path.join(root, filename.replace(".xml", ".json"))
+                        if filename.endswith(".pdf"):
+                            json_file = os.path.join(root, filename.replace(".pdf", ".json"))
+                        elif filename.endswith(".xml"):
+                            json_file = os.path.join(root, filename.replace(".xml", ".json"))
+                        elif filename.endswith(".pdf.gz"):
+                            json_file = os.path.join(root, filename.replace(".pdf.gz", ".json"))
+                        elif filename.endswith(".PDF"):
+                            json_file = os.path.join(root, filename.replace(".PDF", ".json"))
+
                         if os.path.isfile(json_file):
                             with open(json_file) as f:
                                 full_record = json.load(f)
