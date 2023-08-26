@@ -156,7 +156,7 @@ class software_mentions_client(object):
                     filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".latex.tei.xml"))
                     if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
                         # we have a TEI file, so if the current filename is not this TEI, we skip
-                        if not filename.endswith(".pub2tei.tei.xml") and not not filename.endswith(".latex.tei.xml"):
+                        if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
                             continue
 
                     # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
@@ -365,7 +365,7 @@ class software_mentions_client(object):
                         filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".latex.tei.xml"))
                         if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
                             # we have a TEI file, so if the current filename is not this TEI, we skip
-                            if not filename.endswith(".pub2tei.tei.xml") and not not filename.endswith(".latex.tei.xml"):
+                            if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
                                 continue
 
                         # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
