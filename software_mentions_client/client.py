@@ -153,10 +153,21 @@ class software_mentions_client(object):
 
                     # prioretize TEI XML because better quality and faster
                     filename_tei1 = os.path.join(root, filename_json.replace(".software.json", ".pub2tei.tei.xml"))
-                    filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".pub2tei.tei.xml"))
+                    filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".latex.tei.xml"))
                     if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
                         # we have a TEI file, so if the current filename is not this TEI, we skip
-                        if not filename.endswith(".tei.xml"):
+                        if not filename.endswith(".pub2tei.tei.xml") and not not filename.endswith(".latex.tei.xml"):
+                            continue
+
+                    # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
+                    # because processing PDF allows bounding box coordinates in the results for software mentions
+                    # which is an added value
+                    # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
+                    # PDF coordinates
+                    filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
+                    filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
+                    if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                        if filename.endswith(".grobid.tei.xml"):
                             continue
 
                     sha1 = getSHA1(os.path.join(root,filename))
@@ -348,6 +359,25 @@ class software_mentions_client(object):
                         # if the json file already exists, we skip 
                         if os.path.isfile(os.path.join(root, filename_json)):
                             continue
+
+                        # prioretize TEI XML because better quality and faster
+                        filename_tei1 = os.path.join(root, filename_json.replace(".software.json", ".pub2tei.tei.xml"))
+                        filename_tei2 = os.path.join(root, filename_json.replace(".software.json", ".latex.tei.xml"))
+                        if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                            # we have a TEI file, so if the current filename is not this TEI, we skip
+                            if not filename.endswith(".pub2tei.tei.xml") and not not filename.endswith(".latex.tei.xml"):
+                                continue
+
+                        # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
+                        # because processing PDF allows bounding box coordinates in the results for software mentions
+                        # which is an added value
+                        # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
+                        # PDF coordinates
+                        filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
+                        filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
+                        if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                            if filename.endswith(".grobid.tei.xml"):
+                                continue
 
                         sha1 = getSHA1(os.path.join(root,filename))
 
