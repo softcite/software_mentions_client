@@ -148,6 +148,12 @@ class software_mentions_client(object):
                         filename_json = filename.replace(".pdf.gz", ".software.json")
                     elif filename.endswith(".PDF"):
                         filename_json = filename.replace(".PDF", ".software.json")
+                    elif filename.endswith(".pub2tei.tei.xml"):
+                        filename_json = filename.replace(".pub2tei.tei.xml", ".software.json")
+                    elif filename.endswith(".latex.tei.xml"):
+                        filename_json = filename.replace(".latex.tei.xml", ".software.json")
+                    elif filename.endswith(".grobid.tei.xml"):
+                        filename_json = filename.replace(".grobid.tei.xml", ".software.json")
                     elif filename.endswith(".xml"):
                         filename_json = filename.replace(".xml", ".software.json")
 
@@ -353,6 +359,12 @@ class software_mentions_client(object):
                             filename_json = filename.replace(".pdf.gz", ".software.json")
                         elif filename.endswith(".PDF"):
                             filename_json = filename.replace(".PDF", ".software.json")
+                        elif filename.endswith(".pub2tei.tei.xml"):
+                            filename_json = filename.replace(".pub2tei.tei.xml", ".software.json")
+                        elif filename.endswith(".latex.tei.xml"):
+                            filename_json = filename.replace(".latex.tei.xml", ".software.json")
+                        elif filename.endswith(".grobid.tei.xml"):
+                            filename_json = filename.replace(".grobid.tei.xml", ".software.json")
                         elif filename.endswith(".xml"):
                             filename_json = filename.replace(".xml", ".software.json")
 
