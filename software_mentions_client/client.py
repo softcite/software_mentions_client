@@ -713,15 +713,27 @@ class software_mentions_client(object):
         nb_fail = 0
         nb_success = 0  
 
-        with self.env_software.begin() as txn:
-            cursor = txn.cursor()
-            for key, value in cursor:
-                nb_total += 1
-                result = value.decode(encoding='UTF-8')
-                if result == "True":
-                    nb_success += 1
-                else:
-                    nb_fail += 1
+        if self.env_software is not None: 
+            with self.env_software.begin() as txn:
+                cursor = txn.cursor()
+                for key, value in cursor:
+                    nb_total += 1
+                    result = value.decode(encoding='UTF-8')
+                    if result == "True":
+                        nb_success += 1
+                    else:
+                        nb_fail += 1
+        else:
+            if self.env_dataset is not None: 
+            with self.env_dataset.begin() as txn:
+                cursor = txn.cursor()
+                for key, value in cursor:
+                    nb_total += 1
+                    result = value.decode(encoding='UTF-8')
+                    if result == "True":
+                        nb_success += 1
+                    else:
+                        nb_fail += 1
 
         print("\n\n---")
         print("total entries:", nb_total)
