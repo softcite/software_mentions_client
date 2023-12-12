@@ -334,7 +334,7 @@ class software_mentions_client(object):
             #with ProcessPoolExecutor(max_workers=self.config["concurrency"]) as executor:
             # note: ProcessPoolExecutor will not work due to env objects that can't be serailized (e.g. LMDB variables)
             # client is not cpu bounded but io bounded, so normally it's still okay with threads and GIL
-            executor.map(self.annotate, pdf_files, out_files, full_records, use_datastet, timeout=self.config["timeout"])
+            executor.map(self.annotate, pdf_files, out_files, full_records, [use_datastet]*len(pdf_files), timeout=self.config["timeout"])
 
     def reprocess_failed(self, directory, use_datastet=False):
         """
@@ -1166,7 +1166,7 @@ if __name__ == "__main__":
     full_diagnostic_mongo = args.diagnostic_mongo
     full_diagnostic_files = args.diagnostic_files
     scorched_earth = args.scorched_earth
-    use_datastet = args.use_datastet
+    use_datastet = args.datastet
 
     client = software_mentions_client(config_path=config_path, use_datastet=use_datastet)
 
