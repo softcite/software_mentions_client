@@ -1,6 +1,6 @@
 {
     "software_mention_url": "http://localhost:8060",
-    "dataset_mention_url": "",
+    "dataset_mention_url": "http://localhost:8060",
     "data_path": "./data",
     "aws_access_key_id": "",
     "aws_secret_access_key": "",

@@ -594,13 +594,13 @@ class software_mentions_client(object):
         try:
             if file_in.endswith('.pdf.gz'):
                 the_file = {'input': gzip.open(file_in, 'rb')}
-                if use_datastet:
+                if not use_datastet:
                     url += endpoint_pdf
                 else:
                     url += endpoint_datastet_pdf
             elif file_in.endswith('.pdf') or file_in.endswith('.PDF'):
                 the_file = {'input': open(file_in, 'rb')}
-                if use_datastet:
+                if not use_datastet:
                     url += endpoint_pdf
                 else:
                     url += endpoint_datastet_pdf
