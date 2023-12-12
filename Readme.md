@@ -47,34 +47,37 @@ Finally install the project in editable state
 ## Usage and options
 
 ```
-usage: python3 -m software_mentions_client.client [-h] [--repo-in REPO_IN] [--file-in FILE_IN] [--file-out FILE_OUT]
-                 [--config CONFIG] [--reprocess] [--reset] [--load]
-                 [--diagnostic-mongo] [--diagnostic-files] [--scorched-earth]
+usage: client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN] [--file-out FILE_OUT] [--config CONFIG]
+                 [--reprocess] [--reset] [--load] [--diagnostic-mongo] [--diagnostic-files]
+                 [--scorched-earth] [--datastet]
 
 Softcite software mention recognizer client
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --repo-in REPO_IN     path to a directory of PDF or XML fulltext files to be processed by the
-                        Softcite software mention recognizer
-  --file-in FILE_IN     a single PDF or XML input file to be processed by the Softcite software
-                        mention recognizer
-  --file-out FILE_OUT   path to a single output the software mentions in JSON format, extracted
-                        from the PDF file-in
-  --config CONFIG       path to the config file, default is ./config.json
-  --reprocess           reprocessed failed PDF or XML fulltexts
-  --reset               ignore previous processing states and re-init the annotation process
-                        from the beginning
-  --load                load json files into the MongoDB instance, the --repo-in or --data-path
-                        parameter must indicate the path to the directory of resulting json
-                        files to be loaded, --dump must indicate the path to the json dump file
-                        of document metadata
-  --diagnostic-mongo    perform a full count of annotations and diagnostic using MongoDB
-                        regarding the harvesting and annotation process
-  --diagnostic-files    perform a full count of annotations and diagnostic using repository
-                        files regarding the harvesting and annotation process
-  --scorched-earth      remove the PDF or XML fulltext files file after their sucessful
-                        processing in order to save storage space, careful with this!
+  -h, --help           show this help message and exit
+  --repo-in REPO_IN    path to a directory of PDF or XML fulltext files to be processed by the
+                       Softcite software mention recognizer
+  --file-in FILE_IN    a single PDF or XML input file to be processed by the Softcite software mention
+                       recognizer
+  --file-out FILE_OUT  path to a single output the software mentions in JSON format, extracted from
+                       the PDF file-in
+  --config CONFIG      path to the config file, default is ./config.json
+  --reprocess          reprocessed failed PDF or XML fulltexts
+  --reset              ignore previous processing states and re-init the annotation process from the
+                       beginning
+  --load               load json files into the MongoDB instance, the --repo-in or --data-path
+                       parameter must indicate the path to the directory of resulting json files to be
+                       loaded, --dump must indicate the path to the json dump file of document
+                       metadata
+  --diagnostic-mongo   perform a full count of annotations and diagnostic using MongoDB regarding the
+                       harvesting and annotation process
+  --diagnostic-files   perform a full count of annotations and diagnostic using repository files
+                       regarding the harvesting and annotation process
+  --scorched-earth     remove the PDF or XML fulltext files file after their sucessful processing in
+                       order to save storage space, careful with this!
+  --datastet           call the DataStet service instead of the software mention extraction service.
+                       It requires a DataStet server running instead of the Softcite server, and
+                       indicating the Datastet server url in the config file
 ```
 
 The logs are written by default in a file `./client.log`, but the location of the logs can be changed in the configuration file (default `./config.json`).
