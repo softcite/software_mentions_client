@@ -213,12 +213,21 @@ class software_mentions_client(object):
                     # if the json file already exists and not force, we skip 
                     if os.path.isfile(os.path.join(root, filename_json)) and not force:
                         # check that this id is considered in the lmdb keeping track of the process
-                        with self.env_software.begin() as txn:
-                            status = txn.get(sha1.encode(encoding='UTF-8'))
-                        if status is None:
-                            with self.env_software.begin(write=True) as txn2:
-                                txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
-                        continue
+
+                        if use_datastet:
+                            with self.env_dataset.begin() as txn:
+                                status = txn.get(sha1.encode(encoding='UTF-8'))
+                            if status is None:
+                                with self.env_dataset.begin(write=True) as txn2:
+                                    txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                            continue
+                        else:
+                            with self.env_software.begin() as txn:
+                                status = txn.get(sha1.encode(encoding='UTF-8'))
+                            if status is None:
+                                with self.env_software.begin(write=True) as txn2:
+                                    txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                            continue
 
                     # if identifier already processed successfully in the local lmdb, we skip
                     # the hash of the fulltext file is used as unique identifier for the document (SHA1)
