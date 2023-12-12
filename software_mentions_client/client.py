@@ -447,11 +447,12 @@ class software_mentions_client(object):
                     # which is an added value
                     # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
                     # PDF coordinates
-                    filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
-                    filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
-                    if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
-                        if filename.endswith(".grobid.tei.xml"):
-                            continue
+                    if not use_datastet:
+                        filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
+                        filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
+                        if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                            if filename.endswith(".grobid.tei.xml"):
+                                continue
 
                     sha1 = getSHA1(os.path.join(root,filename))
 
@@ -657,7 +658,7 @@ class software_mentions_client(object):
 
         # at this stage, if jsonObject is still at None, the process failed 
         if jsonObject is not None and 'mentions' in jsonObject and len(jsonObject['mentions']) > 0:
-            # we have found software mentions in the document
+            # we have found software/dataset mentions in the document
             # add file, DOI, date and version info in the JSON, if available
             if full_record is not None:
                 jsonObject['id'] = full_record['id']
@@ -667,16 +668,17 @@ class software_mentions_client(object):
             jsonObject['file_name'] = os.path.basename(file_in)
 
             # apply blacklist
-            new_mentions = []
-            if 'mentions' in jsonObject:
-                for mention in jsonObject['mentions']:
-                    if "software-name" in mention:
-                        software_name = mention["software-name"]
-                        normalizedForm = software_name["normalizedForm"]
-                        normalizedForm = normalizedForm.replace(" ", "").strip()
-                        if normalizedForm not in self.blacklisted:
-                            new_mentions.append(mention)
-                jsonObject['mentions'] = new_mentions
+            if not use_datastet:
+                new_mentions = []
+                if 'mentions' in jsonObject:
+                    for mention in jsonObject['mentions']:
+                        if "software-name" in mention:
+                            software_name = mention["software-name"]
+                            normalizedForm = software_name["normalizedForm"]
+                            normalizedForm = normalizedForm.replace(" ", "").strip()
+                            if normalizedForm not in self.blacklisted:
+                                new_mentions.append(mention)
+                    jsonObject['mentions'] = new_mentions
 
             if file_out is not None: 
                 # we write the json result into a file together with the processed pdf
@@ -697,13 +699,22 @@ class software_mentions_client(object):
 
         # for keeping track of the processing
         # update processed entry in the lmdb (having entities or not) and failure
-        if self.env_software is not None and full_record is not None:
-            with self.env_software.begin(write=True) as txn:
-                if jsonObject is not None:
-                    txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
-                else:
-                    # the process failed
-                    txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
+        if use_datastet:
+            if self.env_dataset is not None and full_record is not None:
+                with self.env_dataset.begin(write=True) as txn:
+                    if jsonObject is not None:
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                    else:
+                        # the process failed
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
+        else:
+            if self.env_software is not None and full_record is not None:
+                with self.env_software.begin(write=True) as txn:
+                    if jsonObject is not None:
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                    else:
+                        # the process failed
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
 
         if self.scorched_earth and jsonObject is not None:
             # processed is done, remove local document file
