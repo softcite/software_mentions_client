@@ -40,7 +40,7 @@ if __name__ == "__main__":
     stopwords = load_stopwords()
 
     mongo_client = pymongo.MongoClient(config["mongo_host"], int(config["mongo_port"]))
-    mongo_db = mongo_client[config["mongo_db"]]
+    mongo_db = mongo_client[config["mongo_db_software"]]
     if mongo_db is None:
         print("MongoDB server is not available")    
         exit()

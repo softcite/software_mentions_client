@@ -1,5 +1,6 @@
 {
     "software_mention_url": "http://localhost:8060",
+    "dataset_mention_url": "http://localhost:8060",
     "data_path": "./data",
     "aws_access_key_id": "",
     "aws_secret_access_key": "",
@@ -7,7 +8,8 @@
     "region": "",
     "mongo_host": "",
     "mongo_port": "",
-    "mongo_db": "softcite",
+    "mongo_db_software": "softcite",
+    "mongo_db_datatet": "datastet",
     "batch_size": 50,
     "sleep_time": 1,
     "concurrency": 8,
