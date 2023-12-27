@@ -3,19 +3,25 @@
 [![PyPI version](https://badge.fury.io/py/software_mentions_client.svg)](https://badge.fury.io/py/software_mentions_client)
 [![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
 
-Python client for using the Softcite software mention recognition service. It can be applied to 
+Python client for using the Softcite software mention recognition service at scale. It can be applied to: 
 
 * individual PDF or XML fulltext file
 
 * recursively to a local directory, processing all the encountered PDF and XML fulltext files
 
-* to a collection of documents harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and [article-dataset-builder](https://github.com/kermitt2/article-dataset-builder), with the benefit of re-using the collection manifest for injectng metadata and keeping track of progress. The collection can be stored locally or on a S3 storage. 
+* to a collection of documents harvested by [biblio-glutton-harvester](https://github.com/kermitt2/biblio-glutton-harvester) and [article-dataset-builder](https://github.com/kermitt2/article-dataset-builder). The collection can be stored locally or on a S3 storage. 
+
+The client will handle parallel requests and availability of the server to optimize the processing of a large collection of full texts. 
+
+For convenience, the client works also with a [DataStet](https://github.com/kermitt2/datastet) server to run this service at scale similarly as a Softcite software mention recognition service. [DataStet](https://github.com/kermitt2/datastet) extracts dataset mentions from full texts. 
 
 ## Requirements
 
-The client has been tested with Python 3.5-3.8. 
+The client has been tested with Python 3.5-3.10. 
 
-The client requires a working [Softcite software mention recognition service](https://github.com/ourresearch/software-mentions). Service host and port can be changed in the `config.json` file of the client. 
+The client requires a working [Softcite software mention recognition service](https://github.com/ourresearch/software-mentions) or a working [Datastet service](https://github.com/kermitt2/datastet). The easiest is to use a docker image for these services, see the documentation and latest images at <https://hub.docker.com/r/grobid/software-mentions/tags> and <https://hub.docker.com/r/grobid/datastet/tags>.
+
+Service host and port can be changed in the `config.json` file of the client. 
 
 ## Install
 
@@ -139,6 +145,10 @@ Just add `--reprocess` to the command line, the processing will be limited to th
 python3 -m software_mentions_client.client --repo-in /mnt/data/biblio/pmc_oa_dir/ --reprocess
 ```
 
+### Using a DataStet server instead of the default Softcite Software Mention Recognizer
+
+For using the DataStet service instead of the Softcite Software Mention service, use the `--datastet` command line parameter (be sure to indicate the server URL in the configuration file). This alternative mode is provided for convenience and will write results in files with extension `*.dataset.json` instead of `*.software.json`. All the other parameters are similar, just the service to be used and the result files will be different. 
+
 ## Loading annotation files into MongoDB
 
 Using `--load` option will trigger the loading of all the produced annotations into a MongoDB server indicated in the configuration file. 
@@ -167,7 +177,7 @@ python3 -m software_mentions_client.client --diagnostic-mongo
 
 By default, the concurreny of the parallelized calls to a service is `8`. This parameter can be changed in the configuration file `config.json`.
 
-Other important configuration parameter are the URL of the Software mention recognition web service `software_mention_url`, the MongoDb instance information if you wish to load the produced annotations in MongoDB.
+Other important configuration parameter are the URL of the Software mention recognition web service `software_mention_url`, the optional URL of a DataStet server if used `dataset_mention_url`, the MongoDb instance information if you wish to load the produced annotations in MongoDB.
 
 Normally, the configuration parameters `sleep_time`, `timeout` and `batch_size` do not need to be modified to ensure a robust processing. 
 
