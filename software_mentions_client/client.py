@@ -58,7 +58,8 @@ class software_mentions_client(object):
         if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
             self.s3 = S3.S3(self.config)
 
-        self.mongo_db = None
+        self.mongo_db_software = None
+        self.mongo_db_dataset = None
 
         # load blacklist 
         self.blacklisted = []
@@ -531,17 +532,17 @@ class software_mentions_client(object):
     def load_mongo(self, directory):
         if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
             mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
-            self.mongo_db = mongo_client[self.config["mongo_db_software"]]
-        if self.mongo_db == None:
+            self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
+            self.mongo_db_dataset = mongo_client[self.config["mongo_db_dataset"]]
+        if self.mongo_db_software == None and self.mongo_db_dataset == None:
+            print("Error, the software and dataset mention mongodb databases do not exist")
             return
 
         failed = 0
         for root, directories, filenames in os.walk(directory):
             for filename in filenames: 
-                if filename.endswith(".software.json"):
+                if filename.endswith(".software.json") or filename.endswith(".dataset.json"):
                     print(os.path.join(root,filename))
-
-                    # TODO: load also dataset annotation files
 
                     the_json = open(os.path.join(root,filename)).read()
                     try:
@@ -586,11 +587,16 @@ class software_mentions_client(object):
                                 if 'best_oa_location' in jsonObject['metadata']:
                                     glutton_metadata['best_oa_location'] = jsonObject['metadata']['best_oa_location']
                                 jsonObject['metadata'] = glutton_metadata
-                                self._insert_mongo(jsonObject)
                             else:
                                 failed += 1
                         else:
                             failed += 1
+
+                    if filename.endswith(".software.json"):
+                        target = "software"
+                    else:
+                        target = "dataset"
+                    self._insert_mongo(jsonObject, target)
 
         print("number of glutton metadata lookup failed:", failed)
 
@@ -687,7 +693,11 @@ class software_mentions_client(object):
 
             if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
                 # we store the result in mongo db 
-                self._insert_mongo(jsonObject)
+                if use_datastet:
+                    local_target = "dataset"
+                else:
+                    local_target = "software"
+                self._insert_mongo(jsonObject, local_target)
         elif jsonObject is not None:
             # we have no software mention in the document, we still write an empty result file
             # along with the PDF/medtadata files to easily keep track of the processing for this doc
@@ -765,31 +775,31 @@ class software_mentions_client(object):
 
         if full_diagnostic_mongo:
             # check mongodb access - if mongodb is not used or available, we don't go further
-            if self.mongo_db is None:
+            if self.mongo_db_software is None:
                 if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
                     mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
-                    self.mongo_db = mongo_client[self.config["mongo_db_software"]]
+                    self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
 
-            if self.mongo_db is None:
+            if self.mongo_db_software is None:
                 print("MongoDB server is not available for more advanced statistics")    
                 return
 
-            print("MongoDB - number of documents: ", self.mongo_db.documents.count_documents({}))
-            print("MongoDB - number of software mentions: ", self.mongo_db.annotations.count_documents({}))
+            print("MongoDB - number of documents: ", self.mongo_db_software.documents.count_documents({}))
+            print("MongoDB - number of software mentions: ", self.mongo_db_software.annotations.count_documents({}))
 
-            result = self.mongo_db.annotations.find( {"software-name": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find( {"software-name": {"$exists": True}} )
             print("\t  * with software name:", result.count())
  
-            result = self.mongo_db.annotations.find( {"version": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find( {"version": {"$exists": True}} )
             print("\t  * with version:", result.count())
 
-            result = self.mongo_db.annotations.find( {"publisher": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find( {"publisher": {"$exists": True}} )
             print("\t  * with publisher:", result.count())
 
-            result = self.mongo_db.annotations.find( {"url": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find( {"url": {"$exists": True}} )
             print("\t  * with url:", result.count())    
 
-            results = self.mongo_db.annotations.find( {"references": {"$exists": True}} )
+            results = self.mongo_db_software.annotations.find( {"references": {"$exists": True}} )
             nb_ref = 0
             has_ref = 0
             for result in results:
@@ -800,15 +810,15 @@ class software_mentions_client(object):
             print("\t  * with at least one reference", nb_ref) 
             print("\t  * total references", nb_ref) 
 
-            print("MongoDB - number of bibliographical references: ", self.mongo_db.references.count_documents({}))
+            print("MongoDB - number of bibliographical references: ", self.mongo_db_software.references.count_documents({}))
 
-            result = self.mongo_db.references.find( {"tei": {"$regex": "DOI"}} )
+            result = self.mongo_db_software.references.find( {"tei": {"$regex": "DOI"}} )
             print("\t  * with DOI:", result.count())  
 
-            result = self.mongo_db.references.find( {"tei": {"$regex": "PMID"}} )
+            result = self.mongo_db_software.references.find( {"tei": {"$regex": "PMID"}} )
             print("\t  * with PMID:", result.count())  
 
-            result = self.mongo_db.references.find( {"tei": {"$regex": "PMC"}} )
+            result = self.mongo_db_software.references.find( {"tei": {"$regex": "PMC"}} )
             print("\t  * with PMC ID:", result.count())  
             print("---")
         elif full_diagnostic_files:
@@ -1015,22 +1025,44 @@ class software_mentions_client(object):
                 print("\t      * with PMC ID:", nb_dataset_ref_with_pmcid)  
                 print("---") 
 
-    def _insert_mongo(self, jsonObject):
-        if self.mongo_db is None:
-            mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
-            self.mongo_db = mongo_client[self.config["mongo_db_software"]]
+    def _insert_mongo(self, jsonObject, target="software"):
+        if not "id" in jsonObject:
+            return
 
-        if self.mongo_db is None:
+        local_mongo_db = None
+        if target == "software":
+            if self.mongo_db_software is None and "mongo_db_software" in self.config:
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                    try:
+                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]), serverSelectionTimeoutMS=1000)
+                        mongo_client.server_info()
+                        self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
+                    except:
+                        print("Fail to connect to the MongoDb server:", self.config["mongo_host"]+":"+self.config["mongo_port"])
+            local_mongo_db = self.mongo_db_software
+        elif target == "dataset":
+            if self.mongo_db_dataset is None and "mongo_db_dataset" in self.config:
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                    try:
+                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]), serverSelectionTimeoutMS=1000)
+                        mongo_client.server_info()
+                        self.mongo_db_dataset = mongo_client[self.config["mongo_db_dataset"]]
+                    except:
+                        print("Fail to connect to the MongoDb server:", self.config["mongo_host"]+":"+self.config["mongo_port"])
+            local_mongo_db = self.mongo_db_dataset
+
+        if local_mongo_db == None:
+            print("MongoDB database does not exist for", target)
             return
 
         # check if the article/annotations are not already present
-        if self.mongo_db.documents.count_documents({ 'id': jsonObject['id'] }, limit = 1) != 0:
+        if local_mongo_db.documents.count_documents({ 'id': jsonObject['id'] }, limit = 1) != 0:
             # if yes we replace this object, its annotations and references
-            result = self.mongo_db.documents.find_one({ 'id': jsonObject['id'] })
+            result = local_mongo_db.documents.find_one({ 'id': jsonObject['id'] })
             _id = result['_id']
-            self.mongo_db.annotations.delete_many( {'document': _id} )
-            self.mongo_db.references.delete_many( {'document': _id} )
-            result = self.mongo_db.documents.delete_one({ 'id': jsonObject['id'] })
+            local_mongo_db.annotations.delete_many( {'document': _id} )
+            local_mongo_db.references.delete_many( {'document': _id} )
+            result = local_mongo_db.documents.delete_one({ 'id': jsonObject['id'] })
             #print ("result:", type(result), "-- deleted count:", result.deleted_count)
         
         # clean json
@@ -1042,13 +1074,13 @@ class software_mentions_client(object):
             del jsonObjectDocument['mentions']
         if 'references' in jsonObjectDocument:
             del jsonObjectDocument['references']
-        inserted_doc_id = self.mongo_db.documents.insert_one(jsonObjectDocument).inserted_id
+        inserted_doc_id = local_mongo_db.documents.insert_one(jsonObjectDocument).inserted_id
         
         local_ref_map = {}
         if 'references' in jsonObject:
             for reference in jsonObject['references']:
                 reference["document"] = inserted_doc_id
-                inserted_reference_id = self.mongo_db.references.insert_one(reference).inserted_id
+                inserted_reference_id = local_mongo_db.references.insert_one(reference).inserted_id
                 local_ref_map[str(reference["refKey"])] = inserted_reference_id
 
         if 'mentions' in jsonObject:
@@ -1059,7 +1091,7 @@ class software_mentions_client(object):
                     for reference in mention["references"]:
                         if str(reference["refKey"]) in local_ref_map:
                             reference["reference_id"] = local_ref_map[str(reference["refKey"])]
-                inserted_mention_id = self.mongo_db.annotations.insert_one(mention).inserted_id
+                inserted_mention_id = local_mongo_db.annotations.insert_one(mention).inserted_id
 
 
     def biblio_glutton_lookup(self, doi=None, pmcid=None, pmid=None, istex_id=None, istex_ark=None):
