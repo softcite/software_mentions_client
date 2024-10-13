@@ -33,6 +33,7 @@ endpoint_xml = 'service/annotateSoftwareXML'
 endpoint_tei = 'service/annotateSoftwareTEI'
 
 endpoint_datastet_pdf = 'service/annotateDatasetPDF'
+endpoint_datastet_tei = 'service/processDatasetTEI'
 endpoint_datastet_txt = 'service/annotateDatasetSentence'
 
 # default logging settings
@@ -56,7 +57,7 @@ class software_mentions_client(object):
         self._init_lmdb(use_datastet=use_datastet)
 
         if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
-            self.s3 = S3.S3(self.config)
+            self.s3 = software_mentions_client.S3.S3(self.config)
 
         self.mongo_db_software = None
         self.mongo_db_dataset = None
@@ -169,11 +170,6 @@ class software_mentions_client(object):
         for root, directories, filenames in os.walk(directory):
             for filename in filenames:
                 if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz") or filename.endswith(".xml"):
-
-                    # always skip XML files when using datastet service currently
-                    if filename.endswith(".xml") and use_datastet:
-                        continue
-
                     if filename.endswith(".pdf"):
                         filename_json = filename.replace(".pdf", "."+target+".json")
                     elif filename.endswith(".pdf.gz"):
@@ -189,14 +185,13 @@ class software_mentions_client(object):
                     elif filename.endswith(".xml"):
                         filename_json = filename.replace(".xml", "."+target+".json")
 
-                    # prioretize TEI XML because better quality and faster
-                    if not use_datastet:
-                        filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
-                        filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
-                        if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
-                            # we have a TEI file, so if the current filename is not this TEI, we skip
-                            if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
-                                continue
+                    # prioritize TEI XML because better quality and faster
+                    filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
+                    filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
+                    if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                        # we have a TEI file, so if the current filename is not this TEI, we skip
+                        if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
+                            continue
 
                     # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
                     # because processing PDF allows bounding box coordinates in the results for software mentions
@@ -435,25 +430,24 @@ class software_mentions_client(object):
                         continue
 
                     # prioretize TEI XML because better quality and faster
-                    if not use_datastet:
-                        filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
-                        filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
-                        if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
-                            # we have a TEI file, so if the current filename is not this TEI, we skip
-                            if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
-                                continue
+                    filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
+                    filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
+                    if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                        # we have a TEI file, so if the current filename is not this TEI, we skip
+                        if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
+                            continue
 
                     # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
                     # because processing PDF allows bounding box coordinates in the results for software mentions
                     # which is an added value
                     # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
                     # PDF coordinates
-                    if not use_datastet:
-                        filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
-                        filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
-                        if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
-                            if filename.endswith(".grobid.tei.xml"):
-                                continue
+
+                    filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
+                    filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
+                    if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                        if filename.endswith(".grobid.tei.xml"):
+                            continue
 
                     sha1 = getSHA1(os.path.join(root,filename))
 
