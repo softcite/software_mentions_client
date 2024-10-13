@@ -616,7 +616,10 @@ class software_mentions_client(object):
                     url += endpoint_datastet_pdf
             elif file_in.endswith('.tei.xml'):
                 the_file = {'input': open(file_in, 'rb')}
-                url += endpoint_tei
+                if not use_datastet:
+                    url += endpoint_tei
+                else:
+                    url += endpoint_datastet_tei
             elif file_in.endswith('.xml'):
                 the_file = {'input': open(file_in, 'rb')}
                 # check if we have an XML file or a TEI file to select the best endpoint
