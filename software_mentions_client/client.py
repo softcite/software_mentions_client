@@ -251,7 +251,7 @@ class software_mentions_client(object):
                         out_files = []
                         full_records = []
                         runtime = round(time.time() - start_time, 3)
-                        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+                        sys.stdout.write(f"\rtotal process: {str(nb_total)} - accumulated runtime: {str(runtime)}s - {str(round(nb_total/runtime, 2))} files/s  / {str(round(runtime/nb_total, 2))} s/files")
                         sys.stdout.flush()
 
         # last batch
@@ -259,7 +259,7 @@ class software_mentions_client(object):
             self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+            sys.stdout.write(f"\rtotal process: {str(nb_total)} - accumulated runtime: {str(runtime)}s - {str(round(nb_total/runtime, 2))} files/s  / {str(round(runtime/nb_total, 2))} s/files")
             sys.stdout.flush()
 
     """
