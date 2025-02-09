@@ -644,7 +644,7 @@ class software_mentions_client(object):
             elif response.status_code >= 500:
                 logging.error('[{0}] Server Error '.format(response.status_code) + file_in)
             elif response.status_code == 404:
-                logging.error('[{0}] URL not found: [{1}] '.format(response.status_code + url))
+                logging.error('[{0}] URL not found: [{1}] '.format(response.status_code, url))
             elif response.status_code >= 400:
                 logging.error('[{0}] Bad Request'.format(response.status_code))
                 logging.error(response.content)
