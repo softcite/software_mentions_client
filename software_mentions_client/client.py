@@ -2,29 +2,27 @@
 Run the software mention recognizer service on PDF or XML fulltext file collections
 '''
 
-import gzip
-import sys
-import os
-import shutil
-import json
-import pickle
-import lmdb
 import argparse
-import time
-import datetime
-import software_mentions_client.S3
-import concurrent.futures
-import requests
-import pymongo
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+import gzip
 import hashlib
-import copyreg
-import types
+import json
 import logging
 import logging.handlers
+import os
+import pickle
 import pkgutil
+import shutil
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 
-map_size = 100 * 1024 * 1024 * 1024 
+import lmdb
+import pymongo
+import requests
+
+import software_mentions_client.S3
+
+map_size = 100 * 1024 * 1024 * 1024
 
 # default endpoint
 endpoint_pdf = 'service/annotateSoftwarePDF'
@@ -33,19 +31,26 @@ endpoint_xml = 'service/annotateSoftwareXML'
 endpoint_tei = 'service/annotateSoftwareTEI'
 
 endpoint_datastet_pdf = 'service/annotateDatasetPDF'
+endpoint_datastet_tei = 'service/processDatasetTEI'
 endpoint_datastet_txt = 'service/annotateDatasetSentence'
 
 # default logging settings
 logging.basicConfig(filename='client.log', filemode='w', level=logging.DEBUG)
 
-class software_mentions_client(object):
+
+class SoftwareMentionsClient(object):
     """
     Python client for using the Softcite software mention service. 
     """
 
-    def __init__(self, config_path='./config.json', use_datastet=False):
+    def __init__(
+            self,
+            config_path='./config.json',
+            use_datastet=False,
+            data_path=None
+    ):
         self.config = None
-        
+
         # standard lmdb environment for keeping track of the status of processing
         self.env_software = None
 
@@ -53,10 +58,15 @@ class software_mentions_client(object):
         self.env_dataset = None
 
         self._load_config(config_path)
-        self._init_lmdb(use_datastet=use_datastet)
 
-        if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
-            self.s3 = S3.S3(self.config)
+        self.root_data_path = self._init_lmdb(
+            use_datastet=use_datastet,
+            data_path=data_path
+        )
+
+        if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(
+                self.config['bucket_name']) > 0:
+            self.s3 = software_mentions_client.S3.S3(self.config)
 
         self.mongo_db_software = None
         self.mongo_db_dataset = None
@@ -67,7 +77,7 @@ class software_mentions_client(object):
         blacktext = pkgutil.get_data(__name__, "resources/covid_blacklist.txt").decode()
         blacktext_lines = blacktext.split("\n")
 
-        #with open ("resources/covid_blacklist.txt", "r") as blackfile:
+        # with open ("resources/covid_blacklist.txt", "r") as blackfile:
         for line in blacktext_lines:
             line = line.replace(" ", "").strip()
             if not line.startswith("#"):
@@ -77,7 +87,7 @@ class software_mentions_client(object):
         self.scorched_earth = False
 
         logs_filename = "client.log"
-        if "log_file" in self.config: 
+        if "log_file" in self.config:
             logs_filename = self.config['log_file']
 
         logs_level = logging.DEBUG
@@ -92,6 +102,7 @@ class software_mentions_client(object):
                 logs_level = logging.CRITICAL
             else:
                 logs_level = logging.NOTSET
+
         logging.basicConfig(filename=logs_filename, filemode='w', level=logs_level)
         print("logs are written in " + logs_filename)
 
@@ -109,13 +120,13 @@ class software_mentions_client(object):
         # test if Softcite software mention recognizer is up and running...
         the_url = ""
         the_name = ""
-            
+
         if use_datastet:
-            if "dataset_mention_url" in self.config and len(self.config["dataset_mention_url"])>0:
+            if "dataset_mention_url" in self.config and len(self.config["dataset_mention_url"]) > 0:
                 the_url = self.config["dataset_mention_url"]
                 the_name = "dataset"
         else:
-            if "software_mention_url" in self.config and len(self.config["software_mention_url"])>0:
+            if "software_mention_url" in self.config and len(self.config["software_mention_url"]) > 0:
                 the_url = self.config["software_mention_url"]
                 the_name = "software"
 
@@ -127,26 +138,32 @@ class software_mentions_client(object):
             r = requests.get(the_url)
 
             if r.status_code != 200:
-                logging.error(the_name + ' mention extraction server does not appear up and running ' + str(r.status_code))
+                logging.error(
+                    the_name + ' mention extraction server does not appear up and running ' + str(r.status_code))
             else:
                 logging.info(the_name + " mention extraction is up and running")
                 return True
-        except: 
-            logging.error(the_name + ' mention extraction server does not appear up and running: ' + 
-                'test call to service, please check and re-start a server.')
+        except:
+            logging.error(the_name + ' mention extraction server does not appear up and running: ' +
+                          'test call to service, please check and re-start a server.')
         return False
 
-    def _init_lmdb(self, use_datastet=False):
+    def _init_lmdb(self, use_datastet=False, data_path=None) -> str:
         # open in write mode
-        if use_datastet:
-            envFilePath = os.path.join(self.config["data_path"], 'entries_dataset')
-            self.env_dataset = lmdb.open(envFilePath, map_size=map_size)
-        else:
-            envFilePath = os.path.join(self.config["data_path"], 'entries_software')
-            self.env_software = lmdb.open(envFilePath, map_size=map_size)
+        root_data_path = self.config["data_path"] if not data_path else data_path
 
-        #envFilePath = os.path.join(self.config["data_path"], 'fail_software')
-        #self.env_fail_software = lmdb.open(envFilePath, map_size=map_size)
+        os.makedirs(root_data_path, exist_ok=True)
+        if use_datastet:
+            env_file_path = os.path.join(root_data_path, 'entries_dataset')
+            self.env_dataset = lmdb.open(env_file_path, map_size=map_size)
+        else:
+            env_file_path = os.path.join(root_data_path, 'entries_software')
+            self.env_software = lmdb.open(env_file_path, map_size=map_size)
+
+        # envFilePath = os.path.join(self.config["data_path"], 'fail_software')
+        # self.env_fail_software = lmdb.open(envFilePath, map_size=map_size)
+
+        return root_data_path
 
     def annotate_directory(self, directory, force=False, use_datastet=False):
         '''
@@ -168,104 +185,110 @@ class software_mentions_client(object):
 
         for root, directories, filenames in os.walk(directory):
             for filename in filenames:
-                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz") or filename.endswith(".xml"):
 
-                    # always skip XML files when using datastet service currently
-                    if filename.endswith(".xml") and use_datastet:
+                filename_json = self.compute_output_filename(filename, target)
+                if not filename_json:
+                    continue
+
+                # prioritize TEI XML because better quality and faster
+                filename_tei1 = os.path.join(root, filename_json.replace("." + target + ".json", ".pub2tei.tei.xml"))
+                filename_tei2 = os.path.join(root, filename_json.replace("." + target + ".json", ".latex.tei.xml"))
+                if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                    # we have a TEI file, so if the current filename is not this TEI, we skip
+                    if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
                         continue
 
-                    if filename.endswith(".pdf"):
-                        filename_json = filename.replace(".pdf", "."+target+".json")
-                    elif filename.endswith(".pdf.gz"):
-                        filename_json = filename.replace(".pdf.gz", "."+target+".json")
-                    elif filename.endswith(".PDF"):
-                        filename_json = filename.replace(".PDF", "."+target+".json")
-                    elif filename.endswith(".pub2tei.tei.xml"):
-                        filename_json = filename.replace(".pub2tei.tei.xml", "."+target+".json")
-                    elif filename.endswith(".latex.tei.xml"):
-                        filename_json = filename.replace(".latex.tei.xml", "."+target+".json")
-                    elif filename.endswith(".grobid.tei.xml"):
-                        filename_json = filename.replace(".grobid.tei.xml", "."+target+".json")
-                    elif filename.endswith(".xml"):
-                        filename_json = filename.replace(".xml", "."+target+".json")
+                # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
+                # because processing PDF allows bounding box coordinates in the results for software mentions
+                # which is an added value
+                # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
+                # PDF coordinates
+                filename_tei3 = os.path.join(root, filename_json.replace("." + target + ".json", ".grobid.tei.xml"))
+                filename_pdf = os.path.join(root, filename_json.replace("." + target + ".json", ".pdf"))
+                if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                    if filename.endswith(".grobid.tei.xml"):
+                        continue
 
-                    # prioretize TEI XML because better quality and faster
-                    if not use_datastet:
-                        filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
-                        filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
-                        if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
-                            # we have a TEI file, so if the current filename is not this TEI, we skip
-                            if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
-                                continue
+                sha1 = getSHA1(os.path.join(root, filename))
 
-                    # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
-                    # because processing PDF allows bounding box coordinates in the results for software mentions
-                    # which is an added value
-                    # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
-                    # PDF coordinates
-                    filename_tei3 = os.path.join(root, filename_json.replace("."+target+".json", ".grobid.tei.xml"))
-                    filename_pdf = os.path.join(root, filename_json.replace("."+target+".json", ".pdf"))
-                    if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
-                        if filename.endswith(".grobid.tei.xml"):
-                            continue
+                # if the json file already exists and not force, we skip
+                if os.path.isfile(os.path.join(root, filename_json)) and not force:
+                    # check that this id is considered in the lmdb keeping track of the process
 
-                    sha1 = getSHA1(os.path.join(root,filename))
-
-                    # if the json file already exists and not force, we skip 
-                    if os.path.isfile(os.path.join(root, filename_json)) and not force:
-                        # check that this id is considered in the lmdb keeping track of the process
-
-                        if use_datastet:
-                            with self.env_dataset.begin() as txn:
-                                status = txn.get(sha1.encode(encoding='UTF-8'))
-                            if status is None:
-                                with self.env_dataset.begin(write=True) as txn2:
-                                    txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
-                            continue
-                        else:
-                            with self.env_software.begin() as txn:
-                                status = txn.get(sha1.encode(encoding='UTF-8'))
-                            if status is None:
-                                with self.env_software.begin(write=True) as txn2:
-                                    txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
-                            continue
-
-                    # if identifier already processed successfully in the local lmdb, we skip
-                    # the hash of the fulltext file is used as unique identifier for the document (SHA1)
                     if use_datastet:
                         with self.env_dataset.begin() as txn:
                             status = txn.get(sha1.encode(encoding='UTF-8'))
-                            if status is not None and not force:
-                                continue
+                        if status is None:
+                            with self.env_dataset.begin(write=True) as txn2:
+                                txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8'))
+                        continue
                     else:
                         with self.env_software.begin() as txn:
                             status = txn.get(sha1.encode(encoding='UTF-8'))
-                            if status is not None and not force:
-                                continue
+                        if status is None:
+                            with self.env_software.begin(write=True) as txn2:
+                                txn2.put(sha1.encode(encoding='UTF-8'), "True".encode(encoding='UTF-8'))
+                        continue
 
-                    pdf_files.append(os.path.join(root,filename))
-                    out_files.append(os.path.join(root, filename_json))
-                    record = {}
-                    record["id"] = sha1
-                    full_records.append(record)
-                    
-                    if len(pdf_files) == self.config["batch_size"]:
-                        self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
-                        nb_total += len(pdf_files)
-                        pdf_files = []
-                        out_files = []
-                        full_records = []
-                        runtime = round(time.time() - start_time, 3)
-                        sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
-                        sys.stdout.flush()
+                # if identifier already processed successfully in the local lmdb, we skip
+                # the hash of the fulltext file is used as unique identifier for the document (SHA1)
+                if use_datastet:
+                    with self.env_dataset.begin() as txn:
+                        status = txn.get(sha1.encode(encoding='UTF-8'))
+                        if status is not None and not force:
+                            continue
+                else:
+                    with self.env_software.begin() as txn:
+                        status = txn.get(sha1.encode(encoding='UTF-8'))
+                        if status is not None and not force:
+                            continue
+
+                pdf_files.append(os.path.join(root, filename))
+                out_files.append(os.path.join(root, filename_json))
+                record = {}
+                record["id"] = sha1
+                full_records.append(record)
+
+                if len(pdf_files) == self.config["batch_size"]:
+                    self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
+                    nb_total += len(pdf_files)
+                    pdf_files = []
+                    out_files = []
+                    full_records = []
+                    runtime = round(time.time() - start_time, 3)
+                    sys.stdout.write(
+                        f"\rtotal process: {str(nb_total)} - accumulated runtime: {str(runtime)}s - {str(round(nb_total / runtime, 2))} files/s  / {str(round(runtime / nb_total, 2))} s/files")
+                    sys.stdout.flush()
 
         # last batch
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal process: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+            sys.stdout.write(
+                f"\rtotal process: {str(nb_total)} - accumulated runtime: {str(runtime)}s - {str(round(nb_total / runtime, 2))} files/s  / {str(round(runtime / nb_total, 2))} s/files")
             sys.stdout.flush()
+
+    @staticmethod
+    def compute_output_filename(filename, target):
+        if filename.endswith(".pdf"):
+            filename_json = filename.replace(".pdf", "." + target + ".json")
+        elif filename.endswith(".pdf.gz"):
+            filename_json = filename.replace(".pdf.gz", "." + target + ".json")
+        elif filename.endswith(".PDF"):
+            filename_json = filename.replace(".PDF", "." + target + ".json")
+        elif filename.endswith(".pub2tei.tei.xml"):
+            filename_json = filename.replace(".pub2tei.tei.xml", "." + target + ".json")
+        elif filename.endswith(".latex.tei.xml"):
+            filename_json = filename.replace(".latex.tei.xml", "." + target + ".json")
+        elif filename.endswith(".grobid.tei.xml"):
+            filename_json = filename.replace(".grobid.tei.xml", "." + target + ".json")
+        elif filename.endswith(".xml"):
+            filename_json = filename.replace(".xml", "." + target + ".json")
+        else:
+            filename_json = None
+
+        return filename_json
 
     """
     def annotate_collection(self, data_path, force=False, use_datastet=False):
@@ -341,10 +364,11 @@ class software_mentions_client(object):
     def annotate_batch(self, pdf_files, out_files=None, full_records=None, use_datastet=False):
         # process a provided list of PDF
         with ThreadPoolExecutor(max_workers=self.config["concurrency"]) as executor:
-            #with ProcessPoolExecutor(max_workers=self.config["concurrency"]) as executor:
+            # with ProcessPoolExecutor(max_workers=self.config["concurrency"]) as executor:
             # note: ProcessPoolExecutor will not work due to env objects that can't be serailized (e.g. LMDB variables)
             # client is not cpu bounded but io bounded, so normally it's still okay with threads and GIL
-            executor.map(self.annotate, pdf_files, out_files, full_records, [use_datastet]*len(pdf_files), timeout=self.config["timeout"])
+            executor.map(self.annotate, pdf_files, out_files, full_records, [use_datastet] * len(pdf_files),
+                         timeout=self.config["timeout"])
 
     def reprocess_failed(self, directory, use_datastet=False):
         """
@@ -409,98 +433,77 @@ class software_mentions_client(object):
 
         for root, directories, filenames in os.walk(directory):
             for filename in filenames:
-                if filename.endswith(".pdf") or filename.endswith(".PDF") or filename.endswith(".pdf.gz") or filename.endswith(".xml"):
+                filename_json = self.compute_output_filename(filename, target)
+                if not filename_json:
+                    continue
 
-                    # always skip XML files when using datastet service currently
-                    if filename.endswith(".xml") and use_datastet:
+                # if the json file already exists, we skip
+                if os.path.isfile(os.path.join(root, filename_json)):
+                    continue
+
+                # prioritize TEI XML because better quality and faster
+                filename_tei1 = os.path.join(
+                    root, filename_json.replace("." + target + ".json", ".pub2tei.tei.xml")
+                )
+                filename_tei2 = os.path.join(root, filename_json.replace("." + target + ".json", ".latex.tei.xml"))
+                if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
+                    # we have a TEI file, so if the current filename is not this TEI, we skip
+                    if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
                         continue
 
-                    if filename.endswith(".pdf"):
-                        filename_json = filename.replace(".pdf", "."+target+".json")
-                    elif filename.endswith(".pdf.gz"):
-                        filename_json = filename.replace(".pdf.gz", "."+target+".json")
-                    elif filename.endswith(".PDF"):
-                        filename_json = filename.replace(".PDF", "."+target+".json")
-                    elif filename.endswith(".pub2tei.tei.xml"):
-                        filename_json = filename.replace(".pub2tei.tei.xml", "."+target+".json")
-                    elif filename.endswith(".latex.tei.xml"):
-                        filename_json = filename.replace(".latex.tei.xml", "."+target+".json")
-                    elif filename.endswith(".grobid.tei.xml"):
-                        filename_json = filename.replace(".grobid.tei.xml", "."+target+".json")
-                    elif filename.endswith(".xml"):
-                        filename_json = filename.replace(".xml", "."+target+".json")
+                # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
+                # because processing PDF allows bounding box coordinates in the results for software mentions
+                # which is an added value
+                # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
+                # PDF coordinates
 
-                    # if the json file already exists, we skip 
-                    if os.path.isfile(os.path.join(root, filename_json)):
+                filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
+                filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
+                if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
+                    if filename.endswith(".grobid.tei.xml"):
                         continue
 
-                    # prioretize TEI XML because better quality and faster
-                    if not use_datastet:
-                        filename_tei1 = os.path.join(root, filename_json.replace("."+target+".json", ".pub2tei.tei.xml"))
-                        filename_tei2 = os.path.join(root, filename_json.replace("."+target+".json", ".latex.tei.xml"))
-                        if os.path.isfile(filename_tei1) or os.path.isfile(filename_tei2):
-                            # we have a TEI file, so if the current filename is not this TEI, we skip
-                            if not filename.endswith(".pub2tei.tei.xml") and not filename.endswith(".latex.tei.xml"):
-                                continue
+                sha1 = getSHA1(os.path.join(root, filename))
 
-                    # if Grobid TEI and PDF are both present, we skip the Grobid output to process from PDF
-                    # because processing PDF allows bounding box coordinates in the results for software mentions
-                    # which is an added value
-                    # we could however prefer Grobid output and skip PDF if speed is the concern or no interest in
-                    # PDF coordinates
-                    if not use_datastet:
-                        filename_tei3 = os.path.join(root, filename_json.replace(".software.json", ".grobid.tei.xml"))
-                        filename_pdf = os.path.join(root, filename_json.replace(".software.json", ".pdf"))
-                        if os.path.isfile(filename_tei3) and os.path.isfile(filename_pdf):
-                            if filename.endswith(".grobid.tei.xml"):
-                                continue
+                pdf_files.append(os.path.join(root, filename))
+                json_file = os.path.join(root, filename_json)
+                out_files.append(json_file)
 
-                    sha1 = getSHA1(os.path.join(root,filename))
-
-                    pdf_files.append(os.path.join(root,filename))
-                    out_files.append(os.path.join(root, filename_json))
-
-                    if filename.endswith(".pdf"):
-                        json_file = os.path.join(root, filename.replace(".pdf", ".json"))
-                    elif filename.endswith(".xml"):
-                        json_file = os.path.join(root, filename.replace(".xml", ".json"))
-                    elif filename.endswith(".pdf.gz"):
-                        json_file = os.path.join(root, filename.replace(".pdf.gz", ".json"))
-                    elif filename.endswith(".PDF"):
-                        json_file = os.path.join(root, filename.replace(".PDF", ".json"))
-
-                    if os.path.isfile(json_file):
-                        with open(json_file) as f:
-                            full_record = json.load(f)
-                        if full_record["id"] == sha1:
-                            full_records.append(full_record)
-                        else:
-                            record = {}
-                            record["id"] = sha1
-                            full_records.append(record)
+                if os.path.isfile(json_file):
+                    with open(json_file) as f:
+                        full_record = json.load(f)
+                    if full_record["id"] == sha1:
+                        full_records.append(full_record)
                     else:
                         record = {}
                         record["id"] = sha1
                         full_records.append(record)
-                    i += 1
+                else:
+                    record = {}
+                    record["id"] = sha1
+                    full_records.append(record)
+                i += 1
 
-                if i == self.config["batch_size"]:
-                    self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
-                    nb_total += len(pdf_files)
-                    pdf_files = []
-                    out_files = []
-                    full_records = []
-                    i = 0
-                    runtime = round(time.time() - start_time, 3)
-                    sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
-                    sys.stdout.flush()
+            if i == self.config["batch_size"]:
+                self.annotate_batch(pdf_files, out_files, full_records, use_datastet=use_datastet)
+                nb_total += len(pdf_files)
+                pdf_files = []
+                out_files = []
+                full_records = []
+                i = 0
+                runtime = round(time.time() - start_time, 3)
+                sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(
+                    runtime) + " s - " + str(round(nb_total / runtime, 2)) + " files/s  ")
+                sys.stdout.flush()
 
         # last batch for every cases
         if len(pdf_files) > 0:
             self.annotate_batch(pdf_files, out_files, full_records)
             nb_total += len(pdf_files)
             runtime = round(time.time() - start_time, 3)
-            sys.stdout.write("\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(round(nb_total/runtime, 2)) + " files/s  ")
+            sys.stdout.write(
+                "\rtotal reprocess: " + str(nb_total) + " - accumulated runtime: " + str(runtime) + " s - " + str(
+                    round(nb_total / runtime, 2)) + " files/s  ")
             sys.stdout.flush()
 
         logging.info("re-processed: " + str(nb_total) + " entries")
@@ -514,23 +517,23 @@ class software_mentions_client(object):
             # close environments
             self.env_dataset.close()
 
-            envFilePath = os.path.join(self.config["data_path"], 'entries_dataset')
+            envFilePath = os.path.join(self.root_data_path, 'entries_dataset')
             shutil.rmtree(envFilePath)
 
             # re-init the environments
-            self._init_lmdb(use_datastet=True)
+            self._init_lmdb(use_datastet=True, data_path=self.root_data_path)
         else:
             # close environments
             self.env_software.close()
 
-            envFilePath = os.path.join(self.config["data_path"], 'entries_software')
+            envFilePath = os.path.join(self.root_data_path, 'entries_software')
             shutil.rmtree(envFilePath)
 
             # re-init the environments
-            self._init_lmdb(use_datastet=False)
+            self._init_lmdb(use_datastet=False, data_path=self.root_data_path)
 
     def load_mongo(self, directory):
-        if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+        if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
             mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
             self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
             self.mongo_db_dataset = mongo_client[self.config["mongo_db_dataset"]]
@@ -540,15 +543,15 @@ class software_mentions_client(object):
 
         failed = 0
         for root, directories, filenames in os.walk(directory):
-            for filename in filenames: 
+            for filename in filenames:
                 if filename.endswith(".software.json") or filename.endswith(".dataset.json"):
-                    print(os.path.join(root,filename))
+                    print(os.path.join(root, filename))
 
-                    the_json = open(os.path.join(root,filename)).read()
+                    the_json = open(os.path.join(root, filename)).read()
                     try:
                         jsonObject = json.loads(the_json)
                     except:
-                        print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                        print("the json parsing of the following file failed: ", os.path.join(root, filename))
                         continue
 
                     local_id = None
@@ -570,14 +573,15 @@ class software_mentions_client(object):
                     # possibly clean original file path
                     if "original_file_path" in jsonObject:
                         if jsonObject["original_file_path"].startswith('../biblio-glutton-harvester/'):
-                            jsonObject["original_file_path"] = jsonObject["original_file_path"].replace('../biblio-glutton-harvester/', '')
-                    
+                            jsonObject["original_file_path"] = jsonObject["original_file_path"].replace(
+                                '../biblio-glutton-harvester/', '')
+
                     # update metadata via biblio-glutton (this is to be done for mongo upload from file only)
-                    if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip())>0:
-                        if 'metadata' in jsonObject and 'doi' in jsonObject['metadata']: 
+                    if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip()) > 0:
+                        if 'metadata' in jsonObject and 'doi' in jsonObject['metadata']:
                             try:
                                 glutton_metadata = self.biblio_glutton_lookup(doi=jsonObject['metadata']['doi'])
-                            except: 
+                            except:
                                 print("the call to biblio-glutton failed for", jsonObject['metadata']['doi'])
                                 failed += 1
                                 continue
@@ -622,7 +626,10 @@ class software_mentions_client(object):
                     url += endpoint_datastet_pdf
             elif file_in.endswith('.tei.xml'):
                 the_file = {'input': open(file_in, 'rb')}
-                url += endpoint_tei
+                if not use_datastet:
+                    url += endpoint_tei
+                else:
+                    url += endpoint_datastet_tei
             elif file_in.endswith('.xml'):
                 the_file = {'input': open(file_in, 'rb')}
                 # check if we have an XML file or a TEI file to select the best endpoint
@@ -633,10 +640,10 @@ class software_mentions_client(object):
         except:
             logging.exception("input file appears invalid: " + file_in)
             return
-        
+
         jsonObject = None
         try:
-            response = requests.post(url, files=the_file, data = {'disambiguate': 1}, timeout=self.config["timeout"])
+            response = requests.post(url, files=the_file, data={'disambiguate': 1}, timeout=self.config["timeout"])
             if response.status_code == 503:
                 logging.info('service overloaded, sleep ' + str(self.config['sleep_time']) + ' seconds')
                 time.sleep(self.config['sleep_time'])
@@ -653,7 +660,8 @@ class software_mentions_client(object):
                 # note: in case the recognizer has found no software in the document, it will still return
                 # a json object as result, without mentions, but with MD5 and page information
             else:
-                logging.error('Unexpected Error: [HTTP {0}]: Content: {1}'.format(response.status_code, response.content))
+                logging.error(
+                    'Unexpected Error: [HTTP {0}]: Content: {1}'.format(response.status_code, response.content))
 
         except requests.exceptions.Timeout:
             logging.exception("The request to the annotation service has timeout")
@@ -668,7 +676,7 @@ class software_mentions_client(object):
             # add file, DOI, date and version info in the JSON, if available
             if full_record is not None:
                 jsonObject['id'] = full_record['id']
-                #if len(full_record) > 1:
+                # if len(full_record) > 1:
                 jsonObject['metadata'] = full_record;
             jsonObject['original_file_path'] = file_in
             jsonObject['file_name'] = os.path.basename(file_in)
@@ -686,7 +694,7 @@ class software_mentions_client(object):
                                 new_mentions.append(mention)
                     jsonObject['mentions'] = new_mentions
 
-            if file_out is not None: 
+            if file_out is not None:
                 # we write the json result into a file together with the processed pdf
                 with open(file_out, "w", encoding="utf-8") as json_file:
                     json_file.write(json.dumps(jsonObject))
@@ -701,7 +709,7 @@ class software_mentions_client(object):
         elif jsonObject is not None:
             # we have no software mention in the document, we still write an empty result file
             # along with the PDF/medtadata files to easily keep track of the processing for this doc
-            if file_out is not None: 
+            if file_out is not None:
                 # force empty explicit no mentions
                 jsonObject['mentions'] = []
                 with open(file_out, "w", encoding="utf-8") as json_file:
@@ -713,7 +721,7 @@ class software_mentions_client(object):
             if self.env_dataset is not None and full_record is not None:
                 with self.env_dataset.begin(write=True) as txn:
                     if jsonObject is not None:
-                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8'))
                     else:
                         # the process failed
                         txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
@@ -721,7 +729,7 @@ class software_mentions_client(object):
             if self.env_software is not None and full_record is not None:
                 with self.env_software.begin(write=True) as txn:
                     if jsonObject is not None:
-                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8')) 
+                        txn.put(full_record['id'].encode(encoding='UTF-8'), "True".encode(encoding='UTF-8'))
                     else:
                         # the process failed
                         txn.put(full_record['id'].encode(encoding='UTF-8'), "False".encode(encoding='UTF-8'))
@@ -729,7 +737,7 @@ class software_mentions_client(object):
         if self.scorched_earth and jsonObject is not None:
             # processed is done, remove local document file
             try:
-                os.remove(file_in) 
+                os.remove(file_in)
             except:
                 logging.exception("Error while deleting file " + file_in)
 
@@ -741,9 +749,9 @@ class software_mentions_client(object):
         """
         nb_total = 0
         nb_fail = 0
-        nb_success = 0  
+        nb_success = 0
 
-        if self.env_software is not None: 
+        if self.env_software is not None:
             with self.env_software.begin() as txn:
                 cursor = txn.cursor()
                 for key, value in cursor:
@@ -754,7 +762,7 @@ class software_mentions_client(object):
                     else:
                         nb_fail += 1
         else:
-            if self.env_dataset is not None: 
+            if self.env_dataset is not None:
                 with self.env_dataset.begin() as txn:
                     cursor = txn.cursor()
                     for key, value in cursor:
@@ -776,50 +784,51 @@ class software_mentions_client(object):
         if full_diagnostic_mongo:
             # check mongodb access - if mongodb is not used or available, we don't go further
             if self.mongo_db_software is None:
-                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
                     mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]))
                     self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
 
             if self.mongo_db_software is None:
-                print("MongoDB server is not available for more advanced statistics")    
+                print("MongoDB server is not available for more advanced statistics")
                 return
 
             print("MongoDB - number of documents: ", self.mongo_db_software.documents.count_documents({}))
             print("MongoDB - number of software mentions: ", self.mongo_db_software.annotations.count_documents({}))
 
-            result = self.mongo_db_software.annotations.find( {"software-name": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find({"software-name": {"$exists": True}})
             print("\t  * with software name:", result.count())
- 
-            result = self.mongo_db_software.annotations.find( {"version": {"$exists": True}} )
+
+            result = self.mongo_db_software.annotations.find({"version": {"$exists": True}})
             print("\t  * with version:", result.count())
 
-            result = self.mongo_db_software.annotations.find( {"publisher": {"$exists": True}} )
+            result = self.mongo_db_software.annotations.find({"publisher": {"$exists": True}})
             print("\t  * with publisher:", result.count())
 
-            result = self.mongo_db_software.annotations.find( {"url": {"$exists": True}} )
-            print("\t  * with url:", result.count())    
+            result = self.mongo_db_software.annotations.find({"url": {"$exists": True}})
+            print("\t  * with url:", result.count())
 
-            results = self.mongo_db_software.annotations.find( {"references": {"$exists": True}} )
+            results = self.mongo_db_software.annotations.find({"references": {"$exists": True}})
             nb_ref = 0
             has_ref = 0
             for result in results:
                 has_ref += 1
                 the_references = result.get("references")
                 nb_ref += len(the_references)
-                    
-            print("\t  * with at least one reference", nb_ref) 
-            print("\t  * total references", nb_ref) 
 
-            print("MongoDB - number of bibliographical references: ", self.mongo_db_software.references.count_documents({}))
+            print("\t  * with at least one reference", nb_ref)
+            print("\t  * total references", nb_ref)
 
-            result = self.mongo_db_software.references.find( {"tei": {"$regex": "DOI"}} )
-            print("\t  * with DOI:", result.count())  
+            print("MongoDB - number of bibliographical references: ",
+                  self.mongo_db_software.references.count_documents({}))
 
-            result = self.mongo_db_software.references.find( {"tei": {"$regex": "PMID"}} )
-            print("\t  * with PMID:", result.count())  
+            result = self.mongo_db_software.references.find({"tei": {"$regex": "DOI"}})
+            print("\t  * with DOI:", result.count())
 
-            result = self.mongo_db_software.references.find( {"tei": {"$regex": "PMC"}} )
-            print("\t  * with PMC ID:", result.count())  
+            result = self.mongo_db_software.references.find({"tei": {"$regex": "PMID"}})
+            print("\t  * with PMID:", result.count())
+
+            result = self.mongo_db_software.references.find({"tei": {"$regex": "PMC"}})
+            print("\t  * with PMC ID:", result.count())
             print("---")
         elif full_diagnostic_files:
             # in this mode, we go through the produced json files to retrieve information
@@ -860,7 +869,7 @@ class software_mentions_client(object):
             nb_dataset_publisher = 0
             nb_dataset_url = 0
             nb_dataset_version = 0
-           
+
             nb_dataset_mention_with_ref = 0
 
             nb_dataset_documents = 0
@@ -868,16 +877,16 @@ class software_mentions_client(object):
             nbDatasetFiles = 0
 
             for root, directories, filenames in os.walk(directory):
-                
-                for filename in filenames: 
+
+                for filename in filenames:
                     if filename.endswith(".software.json"):
                         nb_documents += 1
-                        #print(os.path.join(root,filename))
-                        the_json = open(os.path.join(root,filename)).read()
+                        # print(os.path.join(root,filename))
+                        the_json = open(os.path.join(root, filename)).read()
                         try:
                             jsonObject = json.loads(the_json)
                         except:
-                            print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                            print("the json parsing of the following file failed: ", os.path.join(root, filename))
                             continue
 
                         nbSoftwareFiles += 1
@@ -886,7 +895,7 @@ class software_mentions_client(object):
                             sys.stdout.write("\rFiles visited: %i" % nbSoftwareFiles)
                             sys.stdout.flush()
 
-                        if "mentions" in jsonObject and len(jsonObject["mentions"])>0:
+                        if "mentions" in jsonObject and len(jsonObject["mentions"]) > 0:
                             nb_documents_with_software += 1
 
                         for mention in jsonObject["mentions"]:
@@ -914,7 +923,7 @@ class software_mentions_client(object):
                                 nb_ref_marker += len(mention["references"])
                                 nb_software_mention_with_ref += 1
 
-                        if "references" in jsonObject and len(jsonObject["references"])>0:
+                        if "references" in jsonObject and len(jsonObject["references"]) > 0:
                             nb_ref += len(jsonObject["references"])
 
                             # like with mongodb queries, we can use simple matching to count PID in full references
@@ -930,12 +939,12 @@ class software_mentions_client(object):
 
                     elif filename.endswith(".dataset.json"):
                         nb_dataset_documents += 1
-                        #print(os.path.join(root,filename))
-                        the_json = open(os.path.join(root,filename)).read()
+                        # print(os.path.join(root,filename))
+                        the_json = open(os.path.join(root, filename)).read()
                         try:
                             jsonObject = json.loads(the_json)
                         except:
-                            print("the json parsing of the following file failed: ", os.path.join(root,filename))
+                            print("the json parsing of the following file failed: ", os.path.join(root, filename))
                             continue
 
                         nbDatasetFiles += 1
@@ -944,7 +953,7 @@ class software_mentions_client(object):
                             sys.stdout.write("\rFiles visited: %i" % nbDatasetFiles)
                             sys.stdout.flush()
 
-                        if "mentions" in jsonObject and len(jsonObject["mentions"])>0:
+                        if "mentions" in jsonObject and len(jsonObject["mentions"]) > 0:
                             nb_documents_with_dataset += 1
 
                         for mention in jsonObject["mentions"]:
@@ -953,7 +962,7 @@ class software_mentions_client(object):
                                     nb_dataset_implicit += 1
                                 elif mention["type"] == "dataset-name":
                                     nb_dataset_name += 1
-                            
+
                             if mention["type"] == "data-device" or "data-device" in mention:
                                 nb_data_device += 1
 
@@ -968,8 +977,8 @@ class software_mentions_client(object):
                                 nb_dataset_ref_marker += len(mention["references"])
                                 nb_dataset_mention_with_ref += 1
 
-                        if "references" in jsonObject and len(jsonObject["references"])>0:
-                            
+                        if "references" in jsonObject and len(jsonObject["references"]) > 0:
+
                             nb_dataset_ref += len(jsonObject["references"])
 
                             # like with mongodb queries, we can use simple matching to count PID in full references
@@ -985,9 +994,10 @@ class software_mentions_client(object):
 
             # report results
             if nb_documents > 0:
-                print("\n\n--- SOFTWARE MENTIONS ---") 
+                print("\n\n--- SOFTWARE MENTIONS ---")
                 print("JSON files - number of documents: ", nb_documents)
-                print("JSON files - number of documents with at least one software mention: ", nb_documents_with_software)
+                print("JSON files - number of documents with at least one software mention: ",
+                      nb_documents_with_software)
                 print("JSON files - number of software mentions: ", nb_software)
                 nb_standalone = nb_software - (nb_environment + nb_component + nb_implicit)
                 print("\t     -> subtype standalone:", nb_standalone)
@@ -997,33 +1007,33 @@ class software_mentions_client(object):
                 print("\t     * with software name:", nb_software)
                 print("\t     * with version:", nb_version)
                 print("\t     * with publisher:", nb_publisher)
-                print("\t     * with url:", nb_url) 
-                print("\t     * with programming language:", nb_language) 
-                print("\t     * mentions with at least one reference", nb_software_mention_with_ref) 
-                print("---") 
+                print("\t     * with url:", nb_url)
+                print("\t     * with programming language:", nb_language)
+                print("\t     * mentions with at least one reference", nb_software_mention_with_ref)
+                print("---")
                 print("JSON files - number of bibliographical reference markers: ", nb_ref_marker)
                 print("JSON files - number of bibliographical references: ", nb_ref)
-                print("\t      * with DOI:", nb_ref_with_doi)  
-                print("\t      * with PMID:", nb_ref_with_pmid)  
-                print("\t      * with PMC ID:", nb_ref_with_pmcid)  
-                print("---")              
+                print("\t      * with DOI:", nb_ref_with_doi)
+                print("\t      * with PMID:", nb_ref_with_pmid)
+                print("\t      * with PMC ID:", nb_ref_with_pmcid)
+                print("---")
 
             if nb_dataset_documents > 0:
-                print("\n\n--- DATASET MENTIONS ---") 
+                print("\n\n--- DATASET MENTIONS ---")
                 print("JSON files - number of documents: ", nb_dataset_documents)
                 print("JSON files - number of documents with at least one dataset mention: ", nb_documents_with_dataset)
                 print("JSON files - number of named dataset mentions: ", nb_dataset_name)
                 print("JSON files - number of implicit dataset mentions: ", nb_dataset_implicit)
                 print("JSON files - number of data device mentions: ", nb_data_device)
-                print("\t     * with url:", nb_dataset_url) 
-                print("\t     * mentions with at least one reference", nb_dataset_mention_with_ref) 
-                print("---") 
+                print("\t     * with url:", nb_dataset_url)
+                print("\t     * mentions with at least one reference", nb_dataset_mention_with_ref)
+                print("---")
                 print("JSON files - number of bibliographical reference markers: ", nb_dataset_ref_marker)
                 print("JSON files - number of bibliographical references: ", nb_dataset_ref)
-                print("\t      * with DOI:", nb_dataset_ref_with_doi)  
-                print("\t      * with PMID:", nb_dataset_ref_with_pmid)  
-                print("\t      * with PMC ID:", nb_dataset_ref_with_pmcid)  
-                print("---") 
+                print("\t      * with DOI:", nb_dataset_ref_with_doi)
+                print("\t      * with PMID:", nb_dataset_ref_with_pmid)
+                print("\t      * with PMC ID:", nb_dataset_ref_with_pmcid)
+                print("---")
 
     def _insert_mongo(self, jsonObject, target="software"):
         if not "id" in jsonObject:
@@ -1032,23 +1042,27 @@ class software_mentions_client(object):
         local_mongo_db = None
         if target == "software":
             if self.mongo_db_software is None and "mongo_db_software" in self.config:
-                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
                     try:
-                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]), serverSelectionTimeoutMS=1000)
+                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]),
+                                                           serverSelectionTimeoutMS=1000)
                         mongo_client.server_info()
                         self.mongo_db_software = mongo_client[self.config["mongo_db_software"]]
                     except:
-                        print("Fail to connect to the MongoDb server:", self.config["mongo_host"]+":"+self.config["mongo_port"])
+                        print("Fail to connect to the MongoDb server:",
+                              self.config["mongo_host"] + ":" + self.config["mongo_port"])
             local_mongo_db = self.mongo_db_software
         elif target == "dataset":
             if self.mongo_db_dataset is None and "mongo_db_dataset" in self.config:
-                if "mongo_host" in self.config and len(self.config["mongo_host"].strip())>0:
+                if "mongo_host" in self.config and len(self.config["mongo_host"].strip()) > 0:
                     try:
-                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]), serverSelectionTimeoutMS=1000)
+                        mongo_client = pymongo.MongoClient(self.config["mongo_host"], int(self.config["mongo_port"]),
+                                                           serverSelectionTimeoutMS=1000)
                         mongo_client.server_info()
                         self.mongo_db_dataset = mongo_client[self.config["mongo_db_dataset"]]
                     except:
-                        print("Fail to connect to the MongoDb server:", self.config["mongo_host"]+":"+self.config["mongo_port"])
+                        print("Fail to connect to the MongoDb server:",
+                              self.config["mongo_host"] + ":" + self.config["mongo_port"])
             local_mongo_db = self.mongo_db_dataset
 
         if local_mongo_db == None:
@@ -1056,15 +1070,15 @@ class software_mentions_client(object):
             return
 
         # check if the article/annotations are not already present
-        if local_mongo_db.documents.count_documents({ 'id': jsonObject['id'] }, limit = 1) != 0:
+        if local_mongo_db.documents.count_documents({'id': jsonObject['id']}, limit=1) != 0:
             # if yes we replace this object, its annotations and references
-            result = local_mongo_db.documents.find_one({ 'id': jsonObject['id'] })
+            result = local_mongo_db.documents.find_one({'id': jsonObject['id']})
             _id = result['_id']
-            local_mongo_db.annotations.delete_many( {'document': _id} )
-            local_mongo_db.references.delete_many( {'document': _id} )
-            result = local_mongo_db.documents.delete_one({ 'id': jsonObject['id'] })
-            #print ("result:", type(result), "-- deleted count:", result.deleted_count)
-        
+            local_mongo_db.annotations.delete_many({'document': _id})
+            local_mongo_db.references.delete_many({'document': _id})
+            result = local_mongo_db.documents.delete_one({'id': jsonObject['id']})
+            # print ("result:", type(result), "-- deleted count:", result.deleted_count)
+
         # clean json
         jsonObject = _clean_json(jsonObject)
 
@@ -1075,7 +1089,7 @@ class software_mentions_client(object):
         if 'references' in jsonObjectDocument:
             del jsonObjectDocument['references']
         inserted_doc_id = local_mongo_db.documents.insert_one(jsonObjectDocument).inserted_id
-        
+
         local_ref_map = {}
         if 'references' in jsonObject:
             for reference in jsonObject['references']:
@@ -1093,7 +1107,6 @@ class software_mentions_client(object):
                             reference["reference_id"] = local_ref_map[str(reference["refKey"])]
                 inserted_mention_id = local_mongo_db.annotations.insert_one(mention).inserted_id
 
-
     def biblio_glutton_lookup(self, doi=None, pmcid=None, pmid=None, istex_id=None, istex_ark=None):
         """
         Lookup on biblio_glutton with the provided strong identifiers, return the full agregated biblio_glutton record
@@ -1104,42 +1117,47 @@ class software_mentions_client(object):
         jsonResult = None
 
         if "biblio_glutton_url" in self.config and len(self.config["biblio_glutton_url"].strip()) > 0:
-            biblio_glutton_url = self.config["biblio_glutton_url"]+"/service/lookup?"
+            biblio_glutton_url = self.config["biblio_glutton_url"] + "/service/lookup?"
 
-            if doi is not None and len(doi)>0:
+            if doi is not None and len(doi) > 0:
                 response = requests.get(biblio_glutton_url, params={'doi': doi}, verify=False, timeout=5)
                 success = (response.status_code == 200)
                 if success:
                     jsonResult = response.json()
 
-            if not success and pmid is not None and len(pmid)>0:
+            if not success and pmid is not None and len(pmid) > 0:
                 response = requests.get(biblio_glutton_url + "pmid=" + pmid, verify=False, timeout=5)
-                success = (response.status_code == 200)
-                if success:
-                    jsonResult = response.json()     
-
-            if not success and pmcid is not None and len(pmcid)>0:
-                response = requests.get(biblio_glutton_url + "pmc=" + pmcid, verify=False, timeout=5)  
                 success = (response.status_code == 200)
                 if success:
                     jsonResult = response.json()
 
-            if not success and istex_id is not None and len(istex_id)>0:
+            if not success and pmcid is not None and len(pmcid) > 0:
+                response = requests.get(biblio_glutton_url + "pmc=" + pmcid, verify=False, timeout=5)
+                success = (response.status_code == 200)
+                if success:
+                    jsonResult = response.json()
+
+            if not success and istex_id is not None and len(istex_id) > 0:
                 response = requests.get(biblio_glutton_url + "istexid=" + istex_id, verify=False, timeout=5)
                 success = (response.status_code == 200)
                 if success:
                     jsonResult = response.json()
 
-        if not success and doi is not None and len(doi)>0 and "crossref_base" in self.config and len(self.config["crossref_base"].strip())>0:
+        if not success and doi is not None and len(doi) > 0 and "crossref_base" in self.config and len(
+                self.config["crossref_base"].strip()) > 0:
             # let's call crossref as fallback for possible X-months gap in biblio-glutton
             # https://api.crossref.org/works/10.1037/0003-066X.59.1.29
-            if "crossref_email" in self.config and len(self.config["crossref_email"].strip())>0:
-                user_agent = {'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0 (mailto:'+self.config["crossref_email"]+')'}
+            if "crossref_email" in self.config and len(self.config["crossref_email"].strip()) > 0:
+                user_agent = {
+                    'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0 (mailto:' +
+                                  self.config["crossref_email"] + ')'}
             else:
-                user_agent = {'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0'}
+                user_agent = {
+                    'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0'}
             try:
-                logging.info("calling... " + self.config["crossref_base"]+"/works/"+doi)
-                response = requests.get(self.config["crossref_base"]+"/works/"+doi, headers=user_agent, verify=False, timeout=5)
+                logging.info("calling... " + self.config["crossref_base"] + "/works/" + doi)
+                response = requests.get(self.config["crossref_base"] + "/works/" + doi, headers=user_agent,
+                                        verify=False, timeout=5)
                 if response.status_code == 200:
                     jsonResult = response.json()['message']
                     # filter out references and re-set doi, in case there are obtained via crossref
@@ -1150,8 +1168,9 @@ class software_mentions_client(object):
                     jsonResult = None
             except:
                 logging.exception("Could not connect to CrossRef")
-        
+
         return jsonResult
+
 
 def generateStoragePath(identifier):
     '''
@@ -1160,8 +1179,10 @@ def generateStoragePath(identifier):
     '''
     return os.path.join(identifier[:2], identifier[2:4], identifier[4:6], identifier[6:8], "")
 
+
 def _deserialize_pickle(serialized):
     return pickle.loads(serialized)
+
 
 def _clean_json(d):
     # clean recursively a json for insertion in MongoDB, basically remove keys starting with $
@@ -1170,20 +1191,23 @@ def _clean_json(d):
     if isinstance(d, list):
         return [_clean_json(v) for v in d]
     return {k: _clean_json(v) for k, v in d.items()
-            if not k.startswith("$") }
+            if not k.startswith("$")}
+
 
 def _is_tei(the_file):
     # based on the header content of the file, check if we have a TEI XML file
     with open(the_file) as f:
         n = 5
-        while n>=0:
+        while n >= 0:
             first_line = f.readline().strip('\n')
             if "<TEI " in first_line or "<tei " in first_line or "<teiCorpus " in first_line:
                 return True
             n -= 1
     return False
 
-BUF_SIZE = 65536    
+
+BUF_SIZE = 65536
+
 
 def getSHA1(the_file):
     sha1 = hashlib.sha1()
@@ -1197,29 +1221,42 @@ def getSHA1(the_file):
 
     return sha1.hexdigest()
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description = "Softcite software mention recognizer client")
-    parser.add_argument("--repo-in", default=None, help="path to a directory of PDF or XML fulltext files to be processed by the Softcite software mention recognizer")  
-    parser.add_argument("--file-in", default=None, help="a single PDF or XML input file to be processed by the Softcite software mention recognizer") 
-    parser.add_argument("--file-out", default=None, help="path to a single output the software mentions in JSON format, extracted from the PDF file-in") 
-    #parser.add_argument("--data-path", default=None, help="path to the resource files created/harvested by biblio-glutton-harvester") 
-    parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json") 
-    parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF or XML fulltexts") 
-    parser.add_argument("--reset", action="store_true", help="ignore previous processing states and re-init the annotation process from the beginning") 
-    parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
-        +"to the directory of resulting json files to be loaded, --dump must indicate the path to the json dump file of document metadata") 
-    parser.add_argument("--diagnostic-mongo", action="store_true", help="perform a full count of annotations and diagnostic using MongoDB "  
-        +"regarding the harvesting and annotation process") 
-    parser.add_argument("--diagnostic-files", action="store_true", help="perform a full count of annotations and diagnostic using repository files "  
-        +"regarding the harvesting and annotation process") 
-    parser.add_argument("--scorched-earth", action="store_true", help="remove the PDF or XML fulltext files file after their sucessful processing in order to save storage space" 
-        +", careful with this!") 
-    parser.add_argument("--datastet", action="store_true", help="call the DataStet service instead of the software mention extraction service. " +
-        "It requires a DataStet server running instead of the Softcite server, and indicating the Datastet server url in the config file") 
+    parser = argparse.ArgumentParser(description="Softcite software mention recognizer client")
+    parser.add_argument("--repo-in", default=None,
+                        help="path to a directory of PDF or XML fulltext files to be processed by the Softcite software mention recognizer")
+    parser.add_argument("--file-in", default=None,
+                        help="a single PDF or XML input file to be processed by the Softcite software mention recognizer")
+    parser.add_argument("--file-out", default=None,
+                        help="path to a single output the software mentions in JSON format, extracted from the PDF file-in")
+    parser.add_argument(
+        "--data-path",
+        default=None,
+        help="path to the directory containing the LMDB database.")
+    parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json")
+    parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF or XML fulltexts")
+    parser.add_argument("--reset", action="store_true",
+                        help="ignore previous processing states and re-init the annotation process from the beginning")
+    parser.add_argument("--load", action="store_true",
+                        help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
+                             + "to the directory of resulting json files to be loaded, --dump must indicate the path to the json dump file of document metadata")
+    parser.add_argument("--diagnostic-mongo", action="store_true",
+                        help="perform a full count of annotations and diagnostic using MongoDB "
+                             + "regarding the harvesting and annotation process")
+    parser.add_argument("--diagnostic-files", action="store_true",
+                        help="perform a full count of annotations and diagnostic using repository files "
+                             + "regarding the harvesting and annotation process")
+    parser.add_argument("--scorched-earth", action="store_true",
+                        help="remove the PDF or XML fulltext files file after their sucessful processing in order to save storage space"
+                             + ", careful with this!")
+    parser.add_argument("--datastet", action="store_true",
+                        help="call the DataStet service instead of the software mention extraction service. " +
+                             "It requires a DataStet server running instead of the Softcite server, and indicating the Datastet server url in the config file")
 
     args = parser.parse_args()
 
-    #data_path = args.data_path
+    data_path = args.data_path
     config_path = args.config
     reprocess = args.reprocess
     reset = args.reset
@@ -1232,9 +1269,13 @@ if __name__ == "__main__":
     scorched_earth = args.scorched_earth
     use_datastet = args.datastet
 
-    client = software_mentions_client(config_path=config_path, use_datastet=use_datastet)
+    client = SoftwareMentionsClient(
+        config_path=config_path,
+        use_datastet=use_datastet,
+        data_path=data_path)
 
-    if not load_mongo and not full_diagnostic_mongo and not full_diagnostic_files and not client.service_isalive(use_datastet=use_datastet):
+    if not load_mongo and not full_diagnostic_mongo and not full_diagnostic_files and not client.service_isalive(
+            use_datastet=use_datastet):
         sys.exit("mention extraction service not available, leaving...")
 
     force = False
@@ -1263,12 +1304,12 @@ if __name__ == "__main__":
 
     elif reprocess:
         client.reprocess_failed(repo_in, use_datastet=use_datastet)
-    elif repo_in is not None and not full_diagnostic_files: 
+    elif repo_in is not None and not full_diagnostic_files:
         client.annotate_directory(repo_in, force, use_datastet=use_datastet)
     elif file_in is not None:
         client.annotate(file_in, file_out, None, use_datastet=use_datastet)
-    #elif data_path is not None: 
+    # elif data_path is not None:
     #    client.annotate_collection(data_path, force, use_datastet=use_datastet)
 
-    client.diagnostic(full_diagnostic_mongo=full_diagnostic_mongo, full_diagnostic_files=full_diagnostic_files, directory=repo_in)
-    
+    client.diagnostic(full_diagnostic_mongo=full_diagnostic_mongo, full_diagnostic_files=full_diagnostic_files,
+                      directory=repo_in)

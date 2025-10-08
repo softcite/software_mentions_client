@@ -55,7 +55,7 @@ Finally install the project in editable state
 ```
 usage: client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN] [--file-out FILE_OUT] [--config CONFIG]
                  [--reprocess] [--reset] [--load] [--diagnostic-mongo] [--diagnostic-files]
-                 [--scorched-earth] [--datastet]
+                 [--scorched-earth] [--datastet] [--data-path DATA_PATH]
 
 Softcite software mention recognizer client
 
@@ -68,6 +68,7 @@ optional arguments:
   --file-out FILE_OUT  path to a single output the software mentions in JSON format, extracted from
                        the PDF file-in
   --config CONFIG      path to the config file, default is ./config.json
+  --data-path DATA_PATH path to the directory containing the LMDB database.
   --reprocess          reprocessed failed PDF or XML fulltexts
   --reset              ignore previous processing states and re-init the annotation process from the
                        beginning
@@ -137,7 +138,7 @@ Anntations will be added along the PDF and XML files, with extension `*.software
 -rw-rw-r-- 1 lopez lopez  485 Aug  8 03:41 0100a44b-6f3f-4cf7-86f9-8ef5e8401567.software.json
 ```
 
-### Reprocess failed PDF or XML fulltexts
+### Reprocess failed PDF or XML fulltext
 
 Just add `--reprocess` to the command line, the processing will be limited to the PDF and XML files that failed when processing them: 
 
@@ -175,7 +176,7 @@ python3 -m software_mentions_client.client --diagnostic-mongo
 
 ## Configuration
 
-By default, the concurreny of the parallelized calls to a service is `8`. This parameter can be changed in the configuration file `config.json`.
+By default, the concurrency of the parallelized calls to a service is `8`. This parameter can be changed in the configuration file `config.json`.
 
 Other important configuration parameter are the URL of the Software mention recognition web service `software_mention_url`, the optional URL of a DataStet server if used `dataset_mention_url`, the MongoDb instance information if you wish to load the produced annotations in MongoDB.
 
