@@ -21,7 +21,7 @@ The client has been tested with Python 3.5-3.10.
 
 The client requires a working [Softcite software mention recognition service](https://github.com/ourresearch/software-mentions) or a working [Datastet service](https://github.com/kermitt2/datastet). The easiest is to use a docker image for these services, see the documentation and latest images at <https://hub.docker.com/r/grobid/software-mentions/tags> and <https://hub.docker.com/r/grobid/datastet/tags>.
 
-Service host and port can be changed in the `config.json` file of the client. 
+By default, the client expects the service at `http://localhost:8060`. The service URL can be changed with the `--server` parameter or in an optional configuration file (see `config.json`) passed with `--config`. When no configuration file is provided, default values are used. 
 
 ## Install
 
@@ -54,7 +54,7 @@ Finally install the project in editable state
 
 ```
 usage: client.py [-h] [--repo-in REPO_IN] [--file-in FILE_IN] [--file-out FILE_OUT] [--config CONFIG]
-                 [--reprocess] [--reset] [--load] [--diagnostic-mongo] [--diagnostic-files]
+                 [--server SERVER] [--n N] [--reprocess] [--reset] [--load] [--diagnostic-mongo] [--diagnostic-files]
                  [--scorched-earth] [--datastet]
 
 Softcite software mention recognizer client
@@ -67,7 +67,11 @@ optional arguments:
                        recognizer
   --file-out FILE_OUT  path to a single output the software mentions in JSON format, extracted from
                        the PDF file-in
-  --config CONFIG      path to the config file, default is ./config.json
+  --config CONFIG      path to the config file (optional), default values are used for missing
+                       parameters
+  --server SERVER      URL of the software mention server (or DataStet server with --datastet),
+                       overrides the config file, default is http://localhost:8060
+  --n N                concurrency for calling the service, overrides the config file, default is 8
   --reprocess          reprocessed failed PDF or XML fulltexts
   --reset              ignore previous processing states and re-init the annotation process from the
                        beginning
@@ -86,7 +90,7 @@ optional arguments:
                        indicating the Datastet server url in the config file
 ```
 
-The logs are written by default in a file `./client.log`, but the location of the logs can be changed in the configuration file (default `./config.json`).
+The logs are written by default in a file `./client.log`, but the location of the logs can be changed in the configuration file (`log_file`).
 
 ## Processing local PDF files
 
@@ -98,7 +102,7 @@ For processing a single file, the resulting json being written as file at the in
 python3 -m software_mentions_client.client --file-in toto.pdf --file-out toto.json
 ```
 
-The default config file is `./config.json`, but could also be specified via the parameter `--config`: 
+No config file is required (default values are used), but one can be specified via the parameter `--config`: 
 
 ```console
 python3 -m software_mentions_client.client --file-in toto.pdf --file-out toto.json --config ./my_config.json
@@ -116,7 +120,7 @@ For processing recursively a directory of PDF files, the results will be:
 python3 -m software_mentions_client.client --repo-in /mnt/data/biblio/pmc_oa_dir/
 ```
 
-The default config file is `./config.json`, but could also be specified via the parameter `--config`: 
+No config file is required (default values are used), but one can be specified via the parameter `--config`: 
 
 ```console
 python3 -m software_mentions_client.client --repo-in /mnt/data/biblio/pmc_oa_dir/ --config ./my_config.json
@@ -175,7 +179,7 @@ python3 -m software_mentions_client.client --diagnostic-mongo
 
 ## Configuration
 
-By default, the concurreny of the parallelized calls to a service is `8`. This parameter can be changed in the configuration file `config.json`.
+By default, the concurreny of the parallelized calls to a service is `8`. This parameter can be changed with `--n` or in the configuration file.
 
 Other important configuration parameter are the URL of the Software mention recognition web service `software_mention_url`, the optional URL of a DataStet server if used `dataset_mention_url`, the MongoDb instance information if you wish to load the produced annotations in MongoDB.
 

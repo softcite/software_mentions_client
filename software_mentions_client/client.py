@@ -7,12 +7,13 @@ import sys
 import os
 import shutil
 import json
+import copy
 import pickle
 import lmdb
 import argparse
 import time
 import datetime
-import software_mentions_client.S3
+from software_mentions_client import S3
 import concurrent.futures
 import requests
 import pymongo
@@ -43,16 +44,52 @@ class software_mentions_client(object):
     Python client for using the Softcite software mention service. 
     """
 
-    def __init__(self, config_path='./config.json', use_datastet=False):
-        self.config = None
-        
+    # default configuration values, overridden by the config file (if any) and then by constructor parameters
+    DEFAULT_CONFIG = {
+        "software_mention_url": "http://localhost:8060",
+        "dataset_mention_url": "http://localhost:8060",
+        "data_path": "./data",
+        "aws_access_key_id": "",
+        "aws_secret_access_key": "",
+        "bucket_name": "",
+        "region": "",
+        "mongo_host": "",
+        "mongo_port": "",
+        "mongo_db_software": "softcite",
+        "mongo_db_dataset": "datastet",
+        "batch_size": 50,
+        "sleep_time": 1,
+        "concurrency": 8,
+        "timeout": 600,
+        "log_file": "client.log",
+        "log_level": "DEBUG",
+        "biblio_glutton_url": "",
+        "crossref_base": "https://api.crossref.org",
+        "crossref_email": ""
+    }
+
+    def __init__(self, config_path=None, use_datastet=False, server_url=None, concurrency=None):
+        self.config = copy.deepcopy(self.DEFAULT_CONFIG)
+
         # standard lmdb environment for keeping track of the status of processing
         self.env_software = None
 
         # standard lmdb environment for keeping track of the status of processing
         self.env_dataset = None
 
-        self._load_config(config_path)
+        # load the config first, so that an invalid config path fails before any lmdb is created
+        if config_path:
+            self._load_config(config_path)
+
+        # constructor parameters (e.g. from the command line) take precedence over the config file
+        if server_url:
+            if use_datastet:
+                self.config["dataset_mention_url"] = server_url
+            else:
+                self.config["software_mention_url"] = server_url
+        if concurrency:
+            self.config["concurrency"] = concurrency
+
         self._init_lmdb(use_datastet=use_datastet)
 
         if 'bucket_name' in self.config and self.config['bucket_name'] is not None and len(self.config['bucket_name']) > 0:
@@ -97,13 +134,16 @@ class software_mentions_client(object):
 
     def _load_config(self, path='./config.json'):
         """
-        Load the json configuration 
+        Load the json configuration and merge it over the default values
         """
-        config_json = open(path).read()
-        self.config = json.loads(config_json)
-        if not "timeout" in self.config:
-            # this is the default value for a service timeout
-            self.config["timeout"] = 600
+        try:
+            with open(path) as config_file:
+                file_config = json.load(config_file)
+        except FileNotFoundError:
+            raise FileNotFoundError("The specified config file " + path + " was not found. Check the path or leave it blank to use the default configuration.")
+        except json.JSONDecodeError as e:
+            raise ValueError("Could not parse config file at " + path + ": " + str(e))
+        self.config.update(file_config)
 
     def service_isalive(self, use_datastet=False):
         # test if Softcite software mention recognizer is up and running...
@@ -1203,7 +1243,9 @@ if __name__ == "__main__":
     parser.add_argument("--file-in", default=None, help="a single PDF or XML input file to be processed by the Softcite software mention recognizer") 
     parser.add_argument("--file-out", default=None, help="path to a single output the software mentions in JSON format, extracted from the PDF file-in") 
     #parser.add_argument("--data-path", default=None, help="path to the resource files created/harvested by biblio-glutton-harvester") 
-    parser.add_argument("--config", default="./config.json", help="path to the config file, default is ./config.json") 
+    parser.add_argument("--config", default=None, help="path to the config file (optional), default values are used for missing parameters")
+    parser.add_argument("--server", default=None, help="URL of the software mention server (or DataStet server with --datastet), overrides the config file, default is http://localhost:8060")
+    parser.add_argument("--n", type=int, default=None, help="concurrency for calling the service, overrides the config file, default is 8")
     parser.add_argument("--reprocess", action="store_true", help="reprocessed failed PDF or XML fulltexts") 
     parser.add_argument("--reset", action="store_true", help="ignore previous processing states and re-init the annotation process from the beginning") 
     parser.add_argument("--load", action="store_true", help="load json files into the MongoDB instance, the --repo-in or --data-path parameter must indicate the path "
@@ -1232,7 +1274,10 @@ if __name__ == "__main__":
     scorched_earth = args.scorched_earth
     use_datastet = args.datastet
 
-    client = software_mentions_client(config_path=config_path, use_datastet=use_datastet)
+    try:
+        client = software_mentions_client(config_path=config_path, use_datastet=use_datastet, server_url=args.server, concurrency=args.n)
+    except (FileNotFoundError, ValueError) as e:
+        sys.exit(str(e))
 
     if not load_mongo and not full_diagnostic_mongo and not full_diagnostic_files and not client.service_isalive(use_datastet=use_datastet):
         sys.exit("mention extraction service not available, leaving...")
